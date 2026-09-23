@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RompeHielos 🧊</title>
+<meta name="description" content="Preguntas para romper el hielo y conocer gente: citas, trabajo, ética y más. Cualquiera puede agregar categorías y preguntas.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>RompeHielos <span class="ice">🧊</span></h1>
+  <p class="subtitle">Preguntas para conocer gente, romper el hielo y sacar buenas conversaciones. Cualquiera puede agregar, editar o borrar.</p>
+</header>
+
+<main id="app">
+  <section class="add-category">
+    <form id="form-nueva-categoria" class="inline-form">
+      <input type="text" id="input-nueva-categoria" placeholder="Nueva categoría (ej: Citas, Laboral, Ética...)" maxlength="60" required>
+      <button type="submit">+ Agregar categoría</button>
+    </form>
+  </section>
+
+  <section id="categorias-list" class="categorias-list">
+    <p class="loading">Cargando categorías…</p>
+  </section>
+</main>
+
+<footer>
+  <p>Hecho para romper el hielo. Todo lo que agregues aquí es público y visible para cualquiera.</p>
+</footer>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
