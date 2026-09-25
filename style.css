@@ -469,15 +469,86 @@ html, body {
   border-radius: 20px;
 }
 
-.card-stage {
-  perspective: 1200px;
-  max-width: 580px;
-  margin: 0 auto 20px;
+/* Table Mode Dual-Sided Layout & Arena */
+.solo-table-wrapper {
+  max-width: 640px;
+  margin: 0 auto;
+  min-height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+/* Dual-Side Player Bars (at Top and Bottom edges) */
+.dual-side-bar {
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.35s ease;
+  user-select: none;
+}
+
+/* Top bar is rotated 180deg permanently so Player 2 across the table reads it right side up! */
+.dual-side-bar.top-edge {
+  transform: rotate(180deg);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  background: rgba(14, 21, 37, 0.8);
+  color: var(--text-muted);
+}
+
+.dual-side-bar.top-edge.active-player {
+  border-color: #f43f5e;
+  background: rgba(244, 63, 94, 0.16);
+  color: #fff;
+  box-shadow: 0 0 24px rgba(244, 63, 94, 0.25);
+}
+
+.dual-side-bar.bottom-edge {
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  background: rgba(14, 21, 37, 0.8);
+  color: var(--text-muted);
+}
+
+.dual-side-bar.bottom-edge.active-player {
+  border-color: var(--cyan);
+  background: rgba(56, 189, 248, 0.16);
+  color: #fff;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.25);
+}
+
+.player-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.player-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.p1-dot { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.p2-dot { background: #f43f5e; box-shadow: 0 0 8px #f43f5e; }
+
+/* Rotating Arena containing both the Card AND the Buttons together */
+.solo-rotating-arena {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
   transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
   transform-origin: center center;
 }
 
-.card-stage.rotate-180 {
+.solo-rotating-arena.rotate-180 {
   transform: rotate(180deg);
 }
 
@@ -512,36 +583,47 @@ html, body {
   font-weight: 700 !important;
 }
 
-.turn-banner {
-  transition: all 0.35s ease;
-}
-
-.turn-banner.p1-active {
-  border-color: var(--cyan) !important;
-  background: rgba(56, 189, 248, 0.12) !important;
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
-}
-
-.turn-banner.p2-active {
-  border-color: #f43f5e !important;
-  background: rgba(244, 63, 94, 0.14) !important;
-  box-shadow: 0 0 20px rgba(244, 63, 94, 0.15);
-}
-
 .question-card-3d {
   position: relative;
-  min-height: 340px;
+  min-height: 380px;
+  flex: 1;
   background: linear-gradient(145deg, #18233a 0%, #0e1525 100%);
   border: 1.5px solid rgba(56, 189, 248, 0.35);
   border-radius: var(--radius-xl);
-  padding: 36px 28px;
+  padding: 32px 28px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 35px -5px rgba(56, 189, 248, 0.25);
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
   user-select: none;
   cursor: pointer;
+}
+
+.card-question-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.card-question-text {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 5.5vw, 32px);
+  font-weight: 800;
+  line-height: 1.4;
+  text-align: center;
+  color: #ffffff;
+  margin: 0;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.card-actions-bar {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 .question-card-3d.shake {

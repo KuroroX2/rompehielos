@@ -393,43 +393,53 @@ function updateSoloCard() {
   void card.offsetWidth;
   card.classList.add("shake");
 
-  // Modo Mesa: Rotación 180° según el turno del jugador
-  const stage = document.getElementById("solo-card-stage");
-  if (stage) {
+  // Modo Mesa: Rotación 180° de TODA la arena (Tarjeta Y Botones de acción juntos) según el turno
+  const arena = document.getElementById("solo-rotating-arena");
+  if (arena) {
     if (currentSession.tableModeActive && currentSession.soloTurnPlayer === 2) {
-      stage.classList.add("rotate-180");
+      arena.classList.add("rotate-180");
     } else {
-      stage.classList.remove("rotate-180");
+      arena.classList.remove("rotate-180");
     }
   }
 
-  // Banner y Badges de Turno
-  const turnBanner = document.getElementById("solo-turn-banner");
-  const turnTitle = document.getElementById("lbl-turn-player-title");
-  const turnInstruction = document.getElementById("lbl-turn-instruction");
-  const turnAvatar = document.getElementById("lbl-turn-avatar");
-  const turnBadge = document.getElementById("solo-turn-badge");
-
+  // Actualización de las Barras Duales (Lado Superior P2 y Lado Inferior P1)
   const isP1 = currentSession.soloTurnPlayer === 1;
-  if (turnBanner) {
-    turnBanner.className = `turn-banner ${isP1 ? "p1-active" : "p2-active"}`;
+  const topBar = document.getElementById("top-player-bar");
+  const bottomBar = document.getElementById("bottom-player-bar");
+  const topInstruction = document.getElementById("lbl-top-player-instruction");
+  const bottomInstruction = document.getElementById("lbl-bottom-player-instruction");
+
+  if (topBar) {
+    if (!isP1) {
+      topBar.classList.add("active-player");
+      if (topInstruction) {
+        topInstruction.textContent = "🗣️ ¡TU TURNO DE PREGUNTAR!";
+        topInstruction.style.color = "#fda4af";
+      }
+    } else {
+      topBar.classList.remove("active-player");
+      if (topInstruction) {
+        topInstruction.textContent = "⏳ Escuchando a Jugador 1...";
+        topInstruction.style.color = "var(--text-muted)";
+      }
+    }
   }
-  if (turnTitle) {
-    turnTitle.textContent = isP1 ? "TURNO DE: JUGADOR 1" : "TURNO DE: JUGADOR 2";
-    turnTitle.style.color = isP1 ? "var(--cyan)" : "#f43f5e";
-  }
-  if (turnAvatar) {
-    turnAvatar.textContent = isP1 ? "👤" : "👥";
-  }
-  if (turnInstruction) {
-    turnInstruction.textContent = isP1
-      ? "Léele esta pregunta en voz alta a tu acompañante 🗣️"
-      : "¡Ahora te toca a ti hacerle la pregunta a tu compañero/a! 🗣️";
-  }
-  if (turnBadge) {
-    turnBadge.textContent = isP1 ? "👤 Turno: Jugador 1" : "👥 Turno: Jugador 2";
-    turnBadge.style.borderColor = isP1 ? "var(--cyan)" : "var(--coral)";
-    turnBadge.style.color = isP1 ? "var(--cyan)" : "var(--coral)";
+
+  if (bottomBar) {
+    if (isP1) {
+      bottomBar.classList.add("active-player");
+      if (bottomInstruction) {
+        bottomInstruction.textContent = "🗣️ ¡TU TURNO DE PREGUNTAR!";
+        bottomInstruction.style.color = "var(--cyan)";
+      }
+    } else {
+      bottomBar.classList.remove("active-player");
+      if (bottomInstruction) {
+        bottomInstruction.textContent = "⏳ Escuchando a Jugador 2...";
+        bottomInstruction.style.color = "var(--text-muted)";
+      }
+    }
   }
 
   // Contadores de subcategoría en el switch rápido
@@ -470,16 +480,16 @@ function updateSoloCard() {
 // Botón Toggle Modo Mesa (Giro automático 180° en mesa)
 document.getElementById("btn-toggle-table-mode")?.addEventListener("click", () => {
   currentSession.tableModeActive = !currentSession.tableModeActive;
-  const stage = document.getElementById("solo-card-stage");
-  if (!currentSession.tableModeActive && stage) {
-    stage.classList.remove("rotate-180");
-  } else if (stage && currentSession.soloTurnPlayer === 2) {
-    stage.classList.add("rotate-180");
+  const arena = document.getElementById("solo-rotating-arena");
+  if (!currentSession.tableModeActive && arena) {
+    arena.classList.remove("rotate-180");
+  } else if (arena && currentSession.soloTurnPlayer === 2) {
+    arena.classList.add("rotate-180");
   }
   updateSoloCard();
   showToast(
     currentSession.tableModeActive
-      ? "Modo Mesa Activado: La pantalla girará 180° automáticamente al cambiar de turno 🔄"
+      ? "Modo Mesa Activado: La tarjeta y botones giran 180° hacia quien le toca preguntar 🔄"
       : "Modo Mesa Desactivado: Orientación fija 📱",
     "🔄"
   );
@@ -487,11 +497,11 @@ document.getElementById("btn-toggle-table-mode")?.addEventListener("click", () =
 
 // Botón Giro Manual 180°
 document.getElementById("btn-turn-flip-manual")?.addEventListener("click", () => {
-  const stage = document.getElementById("solo-card-stage");
-  if (stage) {
-    stage.classList.toggle("rotate-180");
-    const isRotated = stage.classList.contains("rotate-180");
-    showToast(isRotated ? "Giro 180° aplicado (vista opuesta)" : "Orientación normal", "🔄");
+  const arena = document.getElementById("solo-rotating-arena");
+  if (arena) {
+    arena.classList.toggle("rotate-180");
+    const isRotated = arena.classList.contains("rotate-180");
+    showToast(isRotated ? "Giro 180° aplicado (hacia Jugador 2)" : "Orientación original (hacia Jugador 1)", "🔄");
   }
 });
 
