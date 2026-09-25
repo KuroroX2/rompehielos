@@ -163,15 +163,44 @@ function switchView(viewId) {
 // ==========================================
 // 3. MODO 1 CELULAR (SOLO / EN PERSONA)
 // ==========================================
-function renderHomeCategories() {
-  const container = document.getElementById("home-categories-grid");
-  if (!container) return;
-  container.innerHTML = "";
 
-  categories.forEach((cat) => {
-    const card = document.createElement("div");
-    card.className = "category-card";
-    card.innerHTML = `
+// Compatibilidad estricta de categorías por modo de juego
+const MODE_COMPATIBLE_CATEGORIES = {
+  // Modo 1 Celular: Citas, dilemas, amigos, trabajo y quién es más probable (Excluye secretos íntimos que son para sala con votación cruzada)
+  solo: [
+    "citas_nivel1",
+    "citas_nivel2",
+    "citas_nivel3",
+    "dilemas_absurdos",
+    "amigos_fiesta",
+    "empresas_trabajo",
+    "quien_es_mas_probable",
+  ],
+  // Modo Salas Multicelular: Preguntas grupales votadas en sala y dinámicas interactivas
+  multiplayer: [
+    "secretos_intimos",
+    "quien_es_mas_probable",
+    "dilemas_absurdos",
+    "amigos_fiesta",
+    "empresas_trabajo",
+  ],
+  // Modo TV / Proyector: Preguntas gigantes para eventos y reuniones
+  tv: [
+    "dilemas_absurdos",
+    "quien_es_mas_probable",
+    "amigos_fiesta",
+    "empresas_trabajo",
+  ],
+};
+
+function renderSoloCategories() {
+  const soloGrid = document.getElementById("solo-categories-grid");
+  const homeGrid = document.getElementById("home-categories-grid");
+
+  const soloCats = categories.filter((c) => MODE_COMPATIBLE_CATEGORIES.solo.includes(c.id));
+
+  const generateCardHtml = (cat) => `
+    <div class="category-card" data-catid="${cat.id}">
       <div class="category-top">
         <span class="cat-emoji">${cat.icono || "🧊"}</span>
         <span class="cat-badge" style="color:${cat.color || "var(--cyan)"}">${cat.badge || "Pack"}</span>
@@ -179,15 +208,35 @@ function renderHomeCategories() {
       <h4>${escapeHtml(cat.titulo)}</h4>
       <p>${escapeHtml(cat.descripcion)}</p>
       <div class="cat-meta">
-        <span>${cat.preguntas.length} preguntas</span>
+        <span>${cat.preguntas.length} preguntas al azar</span>
         <strong style="color:var(--cyan)">Jugar ➔</strong>
       </div>
-    `;
-    card.addEventListener("click", () => {
-      startSoloMode(cat.id);
+    </div>
+  `;
+
+  if (soloGrid) {
+    soloGrid.innerHTML = soloCats.map(generateCardHtml).join("");
+    soloGrid.querySelectorAll(".category-card").forEach((card) => {
+      card.addEventListener("click", () => {
+        const catId = card.getAttribute("data-catid");
+        startSoloMode(catId);
+      });
     });
-    container.appendChild(card);
-  });
+  }
+
+  if (homeGrid) {
+    homeGrid.innerHTML = soloCats.map(generateCardHtml).join("");
+    homeGrid.querySelectorAll(".category-card").forEach((card) => {
+      card.addEventListener("click", () => {
+        const catId = card.getAttribute("data-catid");
+        startSoloMode(catId);
+      });
+    });
+  }
+}
+
+function renderHomeCategories() {
+  renderSoloCategories();
 }
 
 function startSoloMode(categoryId) {
@@ -238,7 +287,7 @@ function updateSoloCard() {
   turnBadge.style.color = currentSession.soloTurnPlayer === 1 ? "var(--cyan)" : "var(--coral)";
 }
 
-// Botones modo Solo
+// Botones modo Solo y navegación entre vistas de categorías
 document.getElementById("solo-question-card")?.addEventListener("click", () => {
   currentSession.soloQuestionIndex++;
   currentSession.soloTurnPlayer = currentSession.soloTurnPlayer === 1 ? 2 : 1;
@@ -275,6 +324,35 @@ document.getElementById("btn-solo-toggle-turn")?.addEventListener("click", () =>
 document.getElementById("solo-turn-badge")?.addEventListener("click", () => {
   currentSession.soloTurnPlayer = currentSession.soloTurnPlayer === 1 ? 2 : 1;
   updateSoloCard();
+});
+
+document.getElementById("btn-solo-change-cat")?.addEventListener("click", () => {
+  renderSoloCategories();
+  switchView("view-solo-categories");
+});
+
+document.getElementById("btn-back-solo")?.addEventListener("click", () => {
+  renderSoloCategories();
+  switchView("view-solo-categories");
+});
+
+document.getElementById("btn-back-solo-categories")?.addEventListener("click", () => {
+  switchView("view-home");
+});
+
+// Navegación de los 3 Modos desde el Home Hub
+document.getElementById("card-start-solo")?.addEventListener("click", () => {
+  renderSoloCategories();
+  switchView("view-solo-categories");
+});
+
+document.getElementById("card-start-multi")?.addEventListener("click", () => {
+  switchView("view-lobby");
+});
+
+document.getElementById("card-start-tv")?.addEventListener("click", () => {
+  const room = currentSession.currentRoomId || "HIELO";
+  enterTvMode(room);
 });
 
 // ==========================================
@@ -622,17 +700,20 @@ dynamicCards.forEach((card) => {
 document.getElementById("btn-start-dynamic")?.addEventListener("click", async () => {
   const selectedCard = document.querySelector(".dynamic-card-radio.selected");
   const mode = selectedCard?.getAttribute("data-mode") || "secretos_cruzados";
+  const catId = selectedCard?.getAttribute("data-cat") || "secretos_intimos";
   const revealAuthor = document.getElementById("chk-reveal-truth")?.checked ?? true;
   const revealGender = document.getElementById("chk-reveal-gender")?.checked ?? true;
 
-  const catSecretos = categories.find((c) => c.id === "secretos_intimos") || categories[0];
-  const shuffledSecretosOrder = shuffleArray([...Array(catSecretos.preguntas.length).keys()]);
+  const targetCategory = categories.find((c) => c.id === catId) || categories[0];
+  const shuffledSecretosOrder = shuffleArray([...Array(targetCategory.preguntas.length).keys()]);
   currentRoomSecretosDeck = shuffledSecretosOrder;
+  currentSession.selectedRoomCategory = catId;
 
   if (firestoreAvailable && db && currentSession.currentRoomId) {
     try {
       await updateDoc(doc(db, "salas", currentSession.currentRoomId), {
         gameMode: mode,
+        category: catId,
         state: mode === "muro_bano" ? "muro" : "writing",
         revealAuthor: revealAuthor,
         revealGender: revealGender,
@@ -648,6 +729,7 @@ document.getElementById("btn-start-dynamic")?.addEventListener("click", async ()
 
   // Despacho local
   dispatchGameMode(mode, "writing", {
+    category: catId,
     revealAuthor,
     revealGender,
     secretosRoundIndex: 0,
@@ -699,7 +781,9 @@ let secretosCurrentVotes = {};
 let currentRoomSecretosDeck = null;
 
 function setupSecretosPhase(state, roomData = {}) {
-  const cat = categories.find((c) => c.id === "secretos_intimos") || categories[0];
+  const targetCatId = roomData.category || currentSession.selectedRoomCategory || "secretos_intimos";
+  currentSession.selectedRoomCategory = targetCatId;
+  const cat = categories.find((c) => c.id === targetCatId) || categories[0];
   const qList = cat.preguntas;
   if (roomData.secretosRoundIndex !== undefined) {
     secretosRoundIndex = roomData.secretosRoundIndex;
@@ -716,7 +800,7 @@ function setupSecretosPhase(state, roomData = {}) {
   const currentStatement = qList[statementIndex] || qList[secretosRoundIndex % qList.length];
 
   document.getElementById("lbl-secreto-statement").textContent = `"${currentStatement}"`;
-  document.getElementById("lbl-secretos-counter").textContent = `Ronda ${(secretosRoundIndex % qList.length) + 1} de ${qList.length} (Al azar 🎲)`;
+  document.getElementById("lbl-secretos-counter").textContent = `${cat.titulo} • Ronda ${(secretosRoundIndex % qList.length) + 1} de ${qList.length} (Al azar 🎲)`;
 
   // Configuración de desglose por sexo
   const revealGender = roomData.revealGender !== undefined
@@ -1392,10 +1476,96 @@ document.getElementById("btn-duo-next-question")?.addEventListener("click", () =
 // ==========================================
 // 9. MODO TV / PROYECTOR (BIG SCREEN)
 // ==========================================
-document.getElementById("card-start-tv")?.addEventListener("click", () => {
-  const room = currentSession.currentRoomId || "HIELO";
-  enterTvMode(room);
-});
+let tvSelectedSource = "sala_sync";
+let tvQuestionIndex = 0;
+let tvDeck = [];
+
+function setupTvControls() {
+  const btns = document.querySelectorAll(".tv-cat-btn");
+  btns.forEach((b) => {
+    b.addEventListener("click", () => {
+      btns.forEach((x) => x.classList.remove("selected"));
+      b.classList.add("selected");
+      const target = b.getAttribute("data-tvcat");
+      setTvSource(target);
+    });
+  });
+
+  document.getElementById("btn-tv-next-q")?.addEventListener("click", () => {
+    tvQuestionIndex++;
+    renderTvQuestion();
+  });
+
+  document.getElementById("btn-tv-shuffle")?.addEventListener("click", () => {
+    const cat = categories.find((c) => c.id === tvSelectedSource);
+    if (cat) {
+      tvDeck = shuffleArray([...cat.preguntas]);
+      tvQuestionIndex = 0;
+      renderTvQuestion();
+      showToast("¡Preguntas de TV rebarajadas al azar! 🎲", "🔀");
+    }
+  });
+
+  // Atajos de teclado para presentaciones / proyector (Barra espaciadora o Flecha Derecha)
+  window.addEventListener("keydown", (e) => {
+    const tvScreen = document.getElementById("view-tv");
+    if (!tvScreen || !tvScreen.classList.contains("active")) return;
+    if (tvSelectedSource === "sala_sync") return;
+
+    if (e.code === "Space" || e.code === "ArrowRight") {
+      e.preventDefault();
+      tvQuestionIndex++;
+      renderTvQuestion();
+    } else if (e.code === "ArrowLeft") {
+      e.preventDefault();
+      if (tvDeck.length > 0) {
+        tvQuestionIndex = (tvQuestionIndex - 1 + tvDeck.length) % tvDeck.length;
+        renderTvQuestion();
+      }
+    }
+  });
+}
+
+function setTvSource(sourceId) {
+  tvSelectedSource = sourceId;
+  const stageLive = document.getElementById("tv-stage-content");
+  const stageQuestions = document.getElementById("tv-stage-questions");
+
+  if (sourceId === "sala_sync") {
+    if (stageLive) stageLive.style.display = "block";
+    if (stageQuestions) stageQuestions.style.display = "none";
+  } else {
+    if (stageLive) stageLive.style.display = "none";
+    if (stageQuestions) stageQuestions.style.display = "block";
+
+    const cat = categories.find((c) => c.id === sourceId);
+    if (cat) {
+      tvDeck = shuffleArray([...cat.preguntas]);
+      tvQuestionIndex = 0;
+      renderTvQuestion();
+    }
+  }
+}
+
+function renderTvQuestion() {
+  const cat = categories.find((c) => c.id === tvSelectedSource);
+  if (!cat || !tvDeck || tvDeck.length === 0) return;
+
+  const idx = Math.abs(tvQuestionIndex) % tvDeck.length;
+  tvQuestionIndex = idx;
+
+  const qText = tvDeck[idx];
+  const badgeEl = document.getElementById("tv-q-cat-badge");
+  const textEl = document.getElementById("tv-giant-q-text");
+
+  if (badgeEl) {
+    badgeEl.textContent = `${cat.icono || "🧊"} ${cat.titulo} • Pregunta ${idx + 1} de ${tvDeck.length} 🎲`;
+    badgeEl.style.color = cat.color || "var(--cyan)";
+  }
+  if (textEl) {
+    textEl.textContent = `"${qText}"`;
+  }
+}
 
 document.getElementById("btn-open-tv-mode")?.addEventListener("click", () => {
   const room = currentSession.currentRoomId || "HIELO";
@@ -1565,17 +1735,17 @@ document.getElementById("btn-admin-restore-defaults")?.addEventListener("click",
 // 11. NAVEGACIÓN GENERAL & INICIALIZACIÓN
 // ==========================================
 document.getElementById("btn-brand-home")?.addEventListener("click", () => switchView("view-home"));
-document.getElementById("card-start-solo")?.addEventListener("click", () => startSoloMode(categories[0].id));
-document.getElementById("card-start-multi")?.addEventListener("click", () => switchView("view-lobby"));
 
-document.getElementById("btn-back-solo")?.addEventListener("click", () => switchView("view-home"));
 document.getElementById("btn-back-lobby")?.addEventListener("click", () => switchView("view-home"));
 document.getElementById("btn-leave-game")?.addEventListener("click", () => switchView("view-lobby"));
 document.getElementById("btn-leave-tres-confesiones")?.addEventListener("click", () => switchView("view-lobby"));
 document.getElementById("btn-leave-muro")?.addEventListener("click", () => switchView("view-lobby"));
 document.getElementById("btn-leave-duo")?.addEventListener("click", () => switchView("view-lobby"));
 
-document.getElementById("footer-btn-solo")?.addEventListener("click", () => startSoloMode(categories[0].id));
+document.getElementById("footer-btn-solo")?.addEventListener("click", () => {
+  renderSoloCategories();
+  switchView("view-solo-categories");
+});
 document.getElementById("footer-btn-multi")?.addEventListener("click", () => switchView("view-lobby"));
 
 // Fullscreen toggle
@@ -1629,6 +1799,7 @@ window.addEventListener("DOMContentLoaded", () => {
   initParticles();
   setupAvatarPicker();
   setupGenderPicker();
-  renderHomeCategories();
+  renderSoloCategories();
+  setupTvControls();
   checkUrlRoomParam();
 });

@@ -1102,3 +1102,20 @@ html, body {
     font-size: 26px;
   }
 }
+
+/* TV Category Buttons */
+.tv-cat-btn {
+  font-size: 13px !important;
+  padding: 6px 14px !important;
+  border-radius: 20px !important;
+  transition: all 0.2s ease !important;
+}
+
+.tv-cat-btn.selected {
+  background: linear-gradient(135deg, var(--cyan) 0%, #0284c7 100%) !important;
+  color: #070a12 !important;
+  font-weight: 800 !important;
+  border-color: var(--cyan) !important;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.45) !important;
+}
+

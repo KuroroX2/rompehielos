@@ -47,10 +47,10 @@
           <div class="mode-card card-solo" id="card-start-solo">
             <span class="card-header-icon">📱</span>
             <h3>1 Celular en la Mesa <span>➔</span></h3>
-            <p>Ideal para citas, bares o cafeterías. Sin salas ni registros: tocan la pantalla, leen por turnos y descubren filtros de vida.</p>
+            <p>Para citas, amigos o trabajo en persona. Toca aquí para elegir tu categoría (100 preguntas por baraja al azar).</p>
             <div class="mode-footer">
-              <span>Cero configuración • Inmediato</span>
-              <span>Jugar ya</span>
+              <span>Elige Categoría</span>
+              <span style="font-weight: 800; color: var(--cyan);">Seleccionar ➔</span>
             </div>
           </div>
 
@@ -58,10 +58,10 @@
           <div class="mode-card card-multi" id="card-start-multi">
             <span class="card-header-icon">👥</span>
             <h3>Salas Multicelular <span>➔</span></h3>
-            <p>Cada uno entra desde su celular con un código. Confesiones anónimas con votación, "Las 3 Confesiones" y muros en vivo.</p>
+            <p>Cada uno entra desde su celular con un código. Votaciones secretas Sí/No, confesiones y dinámicas sincronizadas.</p>
             <div class="mode-footer">
-              <span>Tiempo real • Fiestas & Equipos</span>
-              <span>Crear / Unirse</span>
+              <span>Dinámicas Grupales</span>
+              <span style="font-weight: 800; color: var(--purple);">Crear / Unirse ➔</span>
             </div>
           </div>
 
@@ -69,22 +69,46 @@
           <div class="mode-card card-tv" id="card-start-tv">
             <span class="card-header-icon">📺</span>
             <h3>Modo TV & Proyector <span>➔</span></h3>
-            <p>Proyecta la sala en la pantalla gigante de la fiesta o sala de reuniones con código QR grande para que todos participen.</p>
+            <p>Pantalla gigante para eventos o fiestas. Elige entre proyectar una sala en vivo con QR o una baraja gigante de preguntas.</p>
             <div class="mode-footer">
-              <span>Ideal para grandes grupos</span>
-              <span>Proyectar</span>
+              <span>Pantalla Gigante</span>
+              <span style="font-weight: 800; color: var(--emerald);">Proyectar ➔</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Category Quick Launcher for Solo Mode -->
+      <!-- Quick Category Launcher for Solo Mode -->
       <div class="categories-section">
-        <h2 class="section-title"><span>🎯</span> Categorías & Barajas Rápidas</h2>
-        <p class="section-desc">Selecciona una categoría para empezar a jugar de inmediato en tu celular:</p>
+        <h2 class="section-title"><span>🎯</span> Barajas para 1 Celular (Acceso Rápido)</h2>
+        <p class="section-desc">Selecciona directamente una categoría compatible para jugar en persona (100 preguntas al azar por temática):</p>
         <div class="categories-grid" id="home-categories-grid">
-          <!-- Dynamically populated -->
+          <!-- Dynamically populated with ONLY solo-compatible categories -->
         </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: SELECTOR DE CATEGORÍA (1 CELULAR)
+         ========================================== -->
+    <section id="view-solo-categories" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-back-solo-categories">← Volver a Modos</button>
+        <div class="turn-pill">📱 1 Celular en la Mesa</div>
+      </div>
+
+      <div style="text-align: center; max-width: 680px; margin: 0 auto 24px;">
+        <span class="hero-pill" style="margin-bottom: 8px;">🎯 Paso 1: Elige tu Categoría</span>
+        <h2 style="font-family: var(--font-display); font-size: clamp(24px, 4vw, 32px); font-weight: 900; margin-bottom: 8px;">
+          ¿Qué tipo de encuentro <span class="text-gradient">tienes hoy?</span>
+        </h2>
+        <p style="color: var(--text-muted); font-size: 14.5px;">
+          Pasa el celular por turnos o déjalo en el centro. Selecciona una temática compatible: cada baraja trae <strong>100 preguntas barajadas 100% al azar</strong>.
+        </p>
+      </div>
+
+      <div class="categories-grid" id="solo-categories-grid">
+        <!-- Rendered dynamically with the 7 compatible categories -->
       </div>
     </section>
 
@@ -93,7 +117,10 @@
          ========================================== -->
     <section id="view-solo" class="view-screen">
       <div class="game-header">
-        <button type="button" class="back-btn" id="btn-back-solo">← Volver al Menú</button>
+        <button type="button" class="back-btn" id="btn-back-solo">← Volver</button>
+        <button type="button" class="btn btn-secondary" id="btn-solo-change-cat" style="font-size: 12.5px; padding: 6px 12px; border-color: rgba(56,189,248,0.4); color: var(--cyan);">
+          🎯 Cambiar Categoría
+        </button>
         <div class="turn-pill" id="solo-turn-badge" title="Toca para cambiar turno">
           👤 Turno: Jugador 1
         </div>
@@ -267,45 +294,66 @@
 
         <!-- Host Game Mode Selector -->
         <div id="host-game-controls" style="border-top: 1px solid var(--border-subtle); padding-top: 18px; margin-top: 18px;">
-          <h4 style="font-size: 15px; font-weight: 800; margin-bottom: 10px;">
-            🎮 Elige la Dinámica Grupal:
+          <h4 style="font-size: 15px; font-weight: 800; margin-bottom: 6px;">
+            🎮 Elige la Dinámica o Categoría para la Sala:
           </h4>
+          <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px;">
+            Selecciona la categoría o dinámica grupal compatible. Cada teléfono votará o participará en vivo (100 preguntas por categoría al azar):
+          </p>
 
           <div class="dynamics-grid">
-            <div class="dynamic-card-radio selected" data-mode="secretos_cruzados" style="border-color: var(--coral); background: rgba(244, 63, 94, 0.15);">
+            <div class="dynamic-card-radio selected" data-mode="secretos_cruzados" data-cat="secretos_intimos" style="border-color: var(--coral); background: rgba(244, 63, 94, 0.15);">
               <div style="font-size: 24px; margin-bottom: 6px;">🔥</div>
               <strong style="display: block; font-size: 14px; color: #fda4af;">Secretos Cruzados (Íntimo)</strong>
-              <small style="color: var(--text-muted); font-size: 12px;">Votos anónimos Sí/No desglosados por sexo/género. ¡Descubre los secretos sin saber quién fue!</small>
+              <small style="color: var(--text-muted); font-size: 12px;">100 preguntas picantes: votos anónimos Sí/No con desglose de intriga por género.</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="secretos_cruzados" data-cat="quien_es_mas_probable">
+              <div style="font-size: 24px; margin-bottom: 6px;">👑</div>
+              <strong style="display: block; font-size: 14px;">¿Quién es Más Probable Que...?</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">100 preguntas para señalar y votar grupalmente en celulares en vivo.</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="secretos_cruzados" data-cat="dilemas_absurdos">
+              <div style="font-size: 24px; margin-bottom: 6px;">🤯</div>
+              <strong style="display: block; font-size: 14px;">Dilemas Absurdos Grupales</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">100 dilemas extremos y morales para debatir y votar en tiempo real.</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="secretos_cruzados" data-cat="amigos_fiesta">
+              <div style="font-size: 24px; margin-bottom: 6px;">🎉</div>
+              <strong style="display: block; font-size: 14px;">Amigos & Carretes Salvajes</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">100 anécdotas de fiesta, alcohol y momentos locos votados en grupo.</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="secretos_cruzados" data-cat="empresas_trabajo">
+              <div style="font-size: 24px; margin-bottom: 6px;">💼</div>
+              <strong style="display: block; font-size: 14px;">Empresas & Trabajo en Equipo</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">100 preguntas para dinámicas laborales, teletrabajo y confianza.</small>
             </div>
 
             <div class="dynamic-card-radio" data-mode="confesiones">
               <div style="font-size: 24px; margin-bottom: 6px;">🕵️</div>
               <strong style="display: block; font-size: 14px;">Confesiones Anónimas</strong>
-              <small style="color: var(--text-muted); font-size: 12px;">Todos confiesan en secreto y votan de quién es cada una.</small>
+              <small style="color: var(--text-muted); font-size: 12px;">Todos confiesan en secreto desde su teléfono y votan de quién es cada una.</small>
             </div>
 
             <div class="dynamic-card-radio" data-mode="tres_confesiones">
               <div style="font-size: 24px; margin-bottom: 6px;">🎭</div>
-              <strong style="display: block; font-size: 14px;">Las 3 Confesiones</strong>
-              <small style="color: var(--text-muted); font-size: 12px;">2 mentiras y 1 verdad. Todos adivinan la única real.</small>
+              <strong style="display: block; font-size: 14px;">Las 3 Confesiones (2M 1V)</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">2 mentiras y 1 verdad por jugador. Todos adivinan la única real.</small>
             </div>
 
             <div class="dynamic-card-radio" data-mode="muro_bano">
               <div style="font-size: 24px; margin-bottom: 6px;">🧱</div>
               <strong style="display: block; font-size: 14px;">Muro de Desahogo</strong>
-              <small style="color: var(--text-muted); font-size: 12px;">Graffitis y notas anónimas en vivo en la pantalla.</small>
+              <small style="color: var(--text-muted); font-size: 12px;">Graffitis y notas anónimas proyectadas en vivo en todos los celulares.</small>
             </div>
 
             <div class="dynamic-card-radio" data-mode="duo_sync">
               <div style="font-size: 24px; margin-bottom: 6px;">⚡</div>
               <strong style="display: block; font-size: 14px;">Dúo Sincronizado</strong>
               <small style="color: var(--text-muted); font-size: 12px;">Para 2 celulares: responden en secreto y se revelan a la vez.</small>
-            </div>
-
-            <div class="dynamic-card-radio" data-mode="feedback_equipo">
-              <div style="font-size: 24px; margin-bottom: 6px;">🌟</div>
-              <strong style="display: block; font-size: 14px;">Muro 360 de Empresa</strong>
-              <small style="color: var(--text-muted); font-size: 12px;">3 cosas positivas y 1 divertida/constructiva por colega.</small>
             </div>
           </div>
 
@@ -814,8 +862,21 @@
           </div>
         </div>
 
+        <!-- TV Category & Source Bar -->
+        <div class="tv-category-bar" style="display: flex; gap: 8px; justify-content: center; align-items: center; padding: 12px 16px; background: rgba(15, 23, 42, 0.75); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap;">
+          <span style="font-size: 13px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px;">
+            📺 Proyectar en Pantalla:
+          </span>
+          <button type="button" class="btn btn-secondary tv-cat-btn" data-tvcat="dilemas_absurdos">🤯 Dilemas Absurdos</button>
+          <button type="button" class="btn btn-secondary tv-cat-btn" data-tvcat="quien_es_mas_probable">👑 ¿Quién es Más Probable?</button>
+          <button type="button" class="btn btn-secondary tv-cat-btn" data-tvcat="amigos_fiesta">🎉 Carretes Salvajes</button>
+          <button type="button" class="btn btn-secondary tv-cat-btn" data-tvcat="empresas_trabajo">💼 Empresas / Trabajo</button>
+          <button type="button" class="btn btn-secondary tv-cat-btn selected" data-tvcat="sala_sync">📡 Sala en Vivo (QR)</button>
+        </div>
+
         <!-- TV Central Stage -->
         <div class="tv-main-stage">
+          <!-- Live Room Sync View -->
           <div id="tv-stage-content">
             <div style="font-size: 72px; margin-bottom: 14px;">🧊</div>
             <h2 class="tv-giant-text" id="tv-main-headline">
@@ -825,10 +886,33 @@
               <!-- Connected players -->
             </div>
           </div>
+
+          <!-- Giant Category Questions Projection Stage -->
+          <div id="tv-stage-questions" style="display: none; text-align: center; max-width: 950px; margin: 0 auto; padding: 20px;">
+            <div style="margin-bottom: 18px;">
+              <span id="tv-q-cat-badge" style="font-size: 13.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; background: rgba(56, 189, 248, 0.15); color: var(--cyan); padding: 6px 16px; border-radius: 20px; border: 1px solid rgba(56, 189, 248, 0.3);">
+                🤯 Dilemas Absurdos • Pregunta 1 de 100 🎲
+              </span>
+            </div>
+            <h2 id="tv-giant-q-text" style="font-family: var(--font-display); font-size: clamp(26px, 4.2vw, 44px); font-weight: 900; line-height: 1.25; margin-bottom: 30px; color: #fff; text-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+              Cargando pregunta...
+            </h2>
+            <div style="display: flex; gap: 14px; justify-content: center; align-items: center; flex-wrap: wrap;">
+              <button type="button" class="btn btn-primary" id="btn-tv-next-q" style="font-size: 17px; padding: 14px 28px;">
+                <span>Siguiente Pregunta</span> <span>➔</span>
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-tv-shuffle" style="font-size: 15px; padding: 14px 20px;">
+                <span>🔀</span> Al Azar
+              </button>
+            </div>
+            <div style="margin-top: 18px; font-size: 12.5px; color: var(--text-dim);">
+              ⌨️ Tip para eventos: Puedes presionar <strong>Barra Espaciadora</strong> o <strong>Flecha Derecha ➔</strong> para avanzar.
+            </div>
+          </div>
         </div>
 
         <div style="text-align: center; color: var(--text-dim); font-size: 14px; padding: 10px;">
-          RompeHielos • Modo Proyección de Sala • Los resultados y confesiones se actualizan en vivo
+          RompeHielos • Modo Proyección de Sala & Preguntas • Los resultados y confesiones se actualizan en vivo
         </div>
       </div>
     </section>
