@@ -103,7 +103,8 @@
         <div class="question-card-3d" id="solo-question-card">
           <div class="card-category-indicator">
             <span id="solo-cat-badge">Dilemas Absurdos</span>
-            <span id="solo-counter">1 / 20</span>
+            <span class="badge-random" style="font-size: 11px; font-weight: 700; background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 8px; border-radius: 12px;">🎲 Al azar</span>
+            <span id="solo-counter">1 / 100</span>
           </div>
 
           <p class="card-question-text" id="solo-question-text">
@@ -123,8 +124,11 @@
         <button type="button" class="btn btn-primary" id="btn-solo-next">
           <span>Siguiente Pregunta</span> <span>▶</span>
         </button>
+        <button type="button" class="btn btn-secondary" id="btn-solo-shuffle" title="Rebarajar preguntas al azar">
+          <span>🔀</span> Al Azar
+        </button>
         <button type="button" class="btn btn-secondary" id="btn-solo-toggle-turn" title="Cambiar turno de jugador">
-          <span>🔄</span> Cambiar Turno
+          <span>🔄</span> Turno
         </button>
       </div>
     </section>
@@ -654,7 +658,7 @@
         <!-- Question Badge & Counter -->
         <div style="text-align: center; margin-bottom: 12px;">
           <span style="font-size: 11px; font-weight: 800; color: var(--coral); text-transform: uppercase; letter-spacing: 0.08em; background: rgba(244, 63, 94, 0.15); padding: 4px 12px; border-radius: 20px;">
-            DECLARACIÓN ÍNTIMA ANÓNIMA • <span id="lbl-secretos-counter">1 de 50</span>
+            DECLARACIÓN ÍNTIMA AL AZAR 🎲 • <span id="lbl-secretos-counter">Ronda 1 de 100</span>
           </span>
         </div>
 
@@ -898,9 +902,14 @@
         </div>
 
         <!-- List of Questions in Category -->
-        <h4 style="font-size: 14px; font-weight: 800; margin-bottom: 10px; color: var(--text-muted);">
-          Preguntas de la categoría (<span id="admin-questions-count">0</span>):
-        </h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h4 style="font-size: 14px; font-weight: 800; margin: 0; color: var(--text-muted);">
+            Preguntas de la categoría (<span id="admin-questions-count">0</span>):
+          </h4>
+          <span style="font-size: 11px; font-weight: 700; color: var(--cyan); background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 8px; border-radius: 12px;">
+            📋 En orden correlativo (#1 al #100)
+          </span>
+        </div>
         <div id="admin-questions-list" style="max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
           <!-- Dynamically populated list -->
         </div>

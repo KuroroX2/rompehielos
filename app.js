@@ -89,6 +89,8 @@ let currentSession = {
   selectedCategory: categories[0]?.id || "dilemas_absurdos",
   soloQuestionIndex: 0,
   soloTurnPlayer: 1,
+  soloDeck: null,
+  secretosDeck: null,
 };
 sessionStorage.setItem("rh_player_id", currentSession.playerId);
 sessionStorage.setItem("rh_player_gender", currentSession.playerGender);
@@ -117,6 +119,17 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+// Algoritmo Fisher-Yates para barajar preguntas al azar en todas las dinámicas
+function shuffleArray(array) {
+  if (!Array.isArray(array)) return [];
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
 // Partículas flotantes de hielo
@@ -179,6 +192,9 @@ function renderHomeCategories() {
 
 function startSoloMode(categoryId) {
   currentSession.selectedCategory = categoryId;
+  const cat = categories.find((c) => c.id === categoryId) || categories[0];
+  // Mezclar preguntas al azar para esta partida
+  currentSession.soloDeck = shuffleArray([...cat.preguntas]);
   currentSession.soloQuestionIndex = 0;
   currentSession.soloTurnPlayer = 1;
   updateSoloCard();
@@ -187,13 +203,23 @@ function startSoloMode(categoryId) {
 
 function updateSoloCard() {
   const cat = categories.find((c) => c.id === currentSession.selectedCategory) || categories[0];
-  const qList = cat.preguntas;
+  if (!currentSession.soloDeck || currentSession.soloDeck.length === 0) {
+    currentSession.soloDeck = shuffleArray([...cat.preguntas]);
+  }
+  const qList = currentSession.soloDeck;
   if (!qList || qList.length === 0) {
     document.getElementById("solo-question-text").textContent = "No hay preguntas en esta categoría.";
     return;
   }
 
-  const idx = Math.abs(currentSession.soloQuestionIndex) % qList.length;
+  // Si se recorrieron todas, rebarajar automáticamente para seguir jugando al azar sin repeticiones inmediatas
+  if (currentSession.soloQuestionIndex >= qList.length) {
+    currentSession.soloDeck = shuffleArray([...cat.preguntas]);
+    currentSession.soloQuestionIndex = 0;
+    showToast("¡Mazo de 100 preguntas rebarajado al azar! 🔀", "🎲");
+  }
+
+  const idx = Math.max(0, Math.min(currentSession.soloQuestionIndex, currentSession.soloDeck.length - 1));
   currentSession.soloQuestionIndex = idx;
 
   const card = document.getElementById("solo-question-card");
@@ -203,8 +229,8 @@ function updateSoloCard() {
 
   document.getElementById("solo-cat-badge").textContent = cat.titulo;
   document.getElementById("solo-cat-badge").style.color = cat.color || "var(--cyan)";
-  document.getElementById("solo-counter").textContent = `${idx + 1} / ${qList.length}`;
-  document.getElementById("solo-question-text").textContent = qList[idx];
+  document.getElementById("solo-counter").textContent = `🎲 ${idx + 1} / ${qList.length}`;
+  document.getElementById("solo-question-text").textContent = currentSession.soloDeck[idx];
 
   const turnBadge = document.getElementById("solo-turn-badge");
   turnBadge.textContent = currentSession.soloTurnPlayer === 1 ? "👤 Turno: Jugador 1" : "👥 Turno: Jugador 2";
@@ -226,9 +252,18 @@ document.getElementById("btn-solo-next")?.addEventListener("click", () => {
 });
 
 document.getElementById("btn-solo-prev")?.addEventListener("click", () => {
+  if (currentSession.soloDeck && currentSession.soloDeck.length > 0) {
+    currentSession.soloQuestionIndex = (currentSession.soloQuestionIndex - 1 + currentSession.soloDeck.length) % currentSession.soloDeck.length;
+    updateSoloCard();
+  }
+});
+
+document.getElementById("btn-solo-shuffle")?.addEventListener("click", () => {
   const cat = categories.find((c) => c.id === currentSession.selectedCategory) || categories[0];
-  currentSession.soloQuestionIndex = (currentSession.soloQuestionIndex - 1 + cat.preguntas.length) % cat.preguntas.length;
+  currentSession.soloDeck = shuffleArray([...cat.preguntas]);
+  currentSession.soloQuestionIndex = 0;
   updateSoloCard();
+  showToast("¡Preguntas rebarajadas al azar! 🎲", "🔀");
 });
 
 document.getElementById("btn-solo-toggle-turn")?.addEventListener("click", () => {
@@ -590,6 +625,10 @@ document.getElementById("btn-start-dynamic")?.addEventListener("click", async ()
   const revealAuthor = document.getElementById("chk-reveal-truth")?.checked ?? true;
   const revealGender = document.getElementById("chk-reveal-gender")?.checked ?? true;
 
+  const catSecretos = categories.find((c) => c.id === "secretos_intimos") || categories[0];
+  const shuffledSecretosOrder = shuffleArray([...Array(catSecretos.preguntas.length).keys()]);
+  currentRoomSecretosDeck = shuffledSecretosOrder;
+
   if (firestoreAvailable && db && currentSession.currentRoomId) {
     try {
       await updateDoc(doc(db, "salas", currentSession.currentRoomId), {
@@ -598,6 +637,8 @@ document.getElementById("btn-start-dynamic")?.addEventListener("click", async ()
         revealAuthor: revealAuthor,
         revealGender: revealGender,
         currentRound: 0,
+        secretosRoundIndex: 0,
+        secretosDeck: shuffledSecretosOrder,
         currentConfessionId: null,
       });
     } catch (e) {
@@ -606,7 +647,12 @@ document.getElementById("btn-start-dynamic")?.addEventListener("click", async ()
   }
 
   // Despacho local
-  dispatchGameMode(mode, "writing", { revealAuthor, revealGender });
+  dispatchGameMode(mode, "writing", {
+    revealAuthor,
+    revealGender,
+    secretosRoundIndex: 0,
+    secretosDeck: shuffledSecretosOrder,
+  });
 });
 
 // Manejo reactivo de estados de la sala para todos los celulares
@@ -650,6 +696,7 @@ function dispatchGameMode(mode, state, roomData = {}) {
 // ==========================================
 let secretosRoundIndex = 0;
 let secretosCurrentVotes = {};
+let currentRoomSecretosDeck = null;
 
 function setupSecretosPhase(state, roomData = {}) {
   const cat = categories.find((c) => c.id === "secretos_intimos") || categories[0];
@@ -657,10 +704,19 @@ function setupSecretosPhase(state, roomData = {}) {
   if (roomData.secretosRoundIndex !== undefined) {
     secretosRoundIndex = roomData.secretosRoundIndex;
   }
-  const currentStatement = qList[secretosRoundIndex % qList.length];
+
+  // Sincronizar o inicializar el mazo de preguntas al azar para la sala
+  if (Array.isArray(roomData.secretosDeck) && roomData.secretosDeck.length > 0) {
+    currentRoomSecretosDeck = roomData.secretosDeck;
+  } else if (!currentRoomSecretosDeck || currentRoomSecretosDeck.length !== qList.length) {
+    currentRoomSecretosDeck = shuffleArray([...Array(qList.length).keys()]);
+  }
+
+  const statementIndex = currentRoomSecretosDeck[secretosRoundIndex % currentRoomSecretosDeck.length];
+  const currentStatement = qList[statementIndex] || qList[secretosRoundIndex % qList.length];
 
   document.getElementById("lbl-secreto-statement").textContent = `"${currentStatement}"`;
-  document.getElementById("lbl-secretos-counter").textContent = `${(secretosRoundIndex % qList.length) + 1} de ${qList.length}`;
+  document.getElementById("lbl-secretos-counter").textContent = `Ronda ${(secretosRoundIndex % qList.length) + 1} de ${qList.length} (Al azar 🎲)`;
 
   // Configuración de desglose por sexo
   const revealGender = roomData.revealGender !== undefined
@@ -862,8 +918,8 @@ document.getElementById("btn-next-secreto")?.addEventListener("click", async () 
     }
   }
 
-  setupSecretosPhase(null, { secretosRoundIndex });
-  showToast("Siguiente declaración íntima...", "🔥");
+  setupSecretosPhase(null, { secretosRoundIndex, secretosDeck: currentRoomSecretosDeck });
+  showToast("Siguiente declaración íntima al azar...", "🎲");
 });
 
 document.getElementById("btn-leave-secretos")?.addEventListener("click", () => switchView("view-lobby"));
@@ -1271,7 +1327,7 @@ function listenToMuroUpdates() {
 // ==========================================
 // 8. DINÁMICA: DÚO SINCRONIZADO
 // ==========================================
-const duoDilemas = [
+const duoDilemasFallback = [
   "¿Quién de los dos tiene mejor sentido del humor?",
   "Si pudiéramos viajar juntos mañana, ¿playa tropical o cabaña en la nieve?",
   "¿Quién es más probable que pierda la paciencia primero en un trancón?",
@@ -1279,14 +1335,23 @@ const duoDilemas = [
   "Si tuvieran que pedir delivery ahora mismo, ¿qué comen?",
 ];
 let duoIndex = 0;
+let duoDeck = [];
 
 function setupDuoPhase() {
+  const pool = [
+    ...(categories.find((c) => c.id === "citas_nivel1")?.preguntas || []),
+    ...(categories.find((c) => c.id === "citas_nivel2")?.preguntas || []),
+    ...(categories.find((c) => c.id === "dilemas_absurdos")?.preguntas || []),
+    ...(categories.find((c) => c.id === "quien_es_mas_probable")?.preguntas || []),
+  ];
+  duoDeck = shuffleArray(pool.length > 0 ? pool : duoDilemasFallback);
   duoIndex = 0;
   loadDuoDilema();
 }
 
 function loadDuoDilema() {
-  const q = duoDilemas[duoIndex % duoDilemas.length];
+  if (!duoDeck || duoDeck.length === 0) setupDuoPhase();
+  const q = duoDeck[duoIndex % duoDeck.length];
   document.getElementById("lbl-duo-question").textContent = `"${q}"`;
   document.getElementById("duo-input-area").style.display = "block";
   document.getElementById("duo-lock-status").style.display = "none";
@@ -1427,14 +1492,17 @@ function renderAdminQuestionsList(catId) {
   document.getElementById("admin-questions-count").textContent = cat.preguntas.length;
   container.innerHTML = "";
 
+  // NOTA: En el modo administrador se presentan SIEMPRE EN SU ORDEN FIJO ORIGINAL (#1 al #100)
+  // para permitir una revisión, auditoría, filtrado y edición predecible sin saltos.
   cat.preguntas.forEach((qText, idx) => {
     const item = document.createElement("div");
     item.className = "admin-list-item";
     item.innerHTML = `
-      <span style="font-size:13.5px; flex:1; line-height:1.4;">${escapeHtml(qText)}</span>
+      <span style="font-size:11.5px; font-weight:800; color:var(--cyan); min-width:34px; padding:2px 4px; background:rgba(56,189,248,0.1); border-radius:4px; text-align:center;">#${idx + 1}</span>
+      <span style="font-size:13.5px; flex:1; line-height:1.4; margin-left:6px;">${escapeHtml(qText)}</span>
       <div style="display:flex; gap:6px;">
-        <button type="button" class="btn btn-secondary" style="font-size:11px; padding:4px 8px;" data-edit="${idx}">✏️</button>
-        <button type="button" class="btn btn-danger" style="font-size:11px; padding:4px 8px;" data-del="${idx}">🗑️</button>
+        <button type="button" class="btn btn-secondary" style="font-size:11px; padding:4px 8px;" data-edit="${idx}" title="Editar texto">✏️</button>
+        <button type="button" class="btn btn-danger" style="font-size:11px; padding:4px 8px;" data-del="${idx}" title="Eliminar pregunta">🗑️</button>
       </div>
     `;
 
