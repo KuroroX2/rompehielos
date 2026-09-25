@@ -1,38 +1,931 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RompeHielos 🧊</title>
-<meta name="description" content="Preguntas para romper el hielo y conocer gente: citas, trabajo, ética y más. Cualquiera puede agregar categorías y preguntas.">
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>RompeHielos 🧊 | Citas, Fiestas, Dilemas & Salas en Vivo</title>
+  <meta name="description" content="La web app definitiva para romper el hielo en citas, reuniones con amigos, carretes y dinámicas de empresa. Juega en 1 celular o en salas en tiempo real.">
+  <meta name="theme-color" content="#070a12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<header class="topbar">
-  <h1>RompeHielos <span class="ice">🧊</span></h1>
-  <p class="subtitle">Preguntas para conocer gente, romper el hielo y sacar buenas conversaciones. Cualquiera puede agregar, editar o borrar.</p>
-</header>
+  <!-- Floating Ice Background Particles -->
+  <div class="bg-particles" id="particles-container"></div>
 
-<main id="app">
-  <section class="add-category">
-    <form id="form-nueva-categoria" class="inline-form">
-      <input type="text" id="input-nueva-categoria" placeholder="Nueva categoría (ej: Citas, Laboral, Ética...)" maxlength="60" required>
-      <button type="submit">+ Agregar categoría</button>
-    </form>
-  </section>
+  <!-- Top App Navigation -->
+  <header class="app-header">
+    <div class="brand" id="btn-brand-home" title="Ir al inicio">
+      <span class="brand-icon">🧊</span>
+      <span class="brand-title">RompeHielos</span>
+      <span class="brand-badge">App</span>
+    </div>
+    <div class="nav-actions">
+      <button type="button" class="btn-icon" id="btn-open-tv-mode" title="Modo TV / Proyector">📺</button>
+      <button type="button" class="btn-icon" id="btn-open-admin" title="Administrar preguntas">🔐</button>
+      <button type="button" class="btn-icon" id="btn-fullscreen" title="Pantalla completa">⛶</button>
+    </div>
+  </header>
 
-  <section id="categorias-list" class="categorias-list">
-    <p class="loading">Cargando categorías…</p>
-  </section>
-</main>
+  <!-- Main Container -->
+  <main class="app-container">
 
-<footer>
-  <p>Hecho para romper el hielo. Todo lo que agregues aquí es público y visible para cualquiera.</p>
-</footer>
+    <!-- ==========================================
+         VIEW: HOME
+         ========================================== -->
+    <section id="view-home" class="view-screen active">
+      <div class="hero">
+        <div class="hero-pill">✨ La app definitiva para romper el hielo</div>
+        <h1 class="hero-title">Conversaciones que <span class="text-gradient">rompen el hielo</span></h1>
+        <p class="hero-sub">Para citas a ciegas, carretes con amigos, dilemas absurdos o dinámicas de trabajo. Elige cómo jugar:</p>
 
-<div id="toast" class="toast" hidden></div>
+        <!-- Mode Selection Hub -->
+        <div class="mode-selection-grid">
+          <!-- Card Solo Mode -->
+          <div class="mode-card card-solo" id="card-start-solo">
+            <span class="card-header-icon">📱</span>
+            <h3>1 Celular en la Mesa <span>➔</span></h3>
+            <p>Ideal para citas, bares o cafeterías. Sin salas ni registros: tocan la pantalla, leen por turnos y descubren filtros de vida.</p>
+            <div class="mode-footer">
+              <span>Cero configuración • Inmediato</span>
+              <span>Jugar ya</span>
+            </div>
+          </div>
 
-<script type="module" src="app.js"></script>
+          <!-- Card Multi-Device Rooms -->
+          <div class="mode-card card-multi" id="card-start-multi">
+            <span class="card-header-icon">👥</span>
+            <h3>Salas Multicelular <span>➔</span></h3>
+            <p>Cada uno entra desde su celular con un código. Confesiones anónimas con votación, "Las 3 Confesiones" y muros en vivo.</p>
+            <div class="mode-footer">
+              <span>Tiempo real • Fiestas & Equipos</span>
+              <span>Crear / Unirse</span>
+            </div>
+          </div>
+
+          <!-- Card TV Proyector -->
+          <div class="mode-card card-tv" id="card-start-tv">
+            <span class="card-header-icon">📺</span>
+            <h3>Modo TV & Proyector <span>➔</span></h3>
+            <p>Proyecta la sala en la pantalla gigante de la fiesta o sala de reuniones con código QR grande para que todos participen.</p>
+            <div class="mode-footer">
+              <span>Ideal para grandes grupos</span>
+              <span>Proyectar</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Quick Launcher for Solo Mode -->
+      <div class="categories-section">
+        <h2 class="section-title"><span>🎯</span> Categorías & Barajas Rápidas</h2>
+        <p class="section-desc">Selecciona una categoría para empezar a jugar de inmediato en tu celular:</p>
+        <div class="categories-grid" id="home-categories-grid">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: SOLO (1 CELULAR / EN PERSONA)
+         ========================================== -->
+    <section id="view-solo" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-back-solo">← Volver al Menú</button>
+        <div class="turn-pill" id="solo-turn-badge" title="Toca para cambiar turno">
+          👤 Turno: Jugador 1
+        </div>
+      </div>
+
+      <div class="card-stage">
+        <div class="question-card-3d" id="solo-question-card">
+          <div class="card-category-indicator">
+            <span id="solo-cat-badge">Dilemas Absurdos</span>
+            <span id="solo-counter">1 / 20</span>
+          </div>
+
+          <p class="card-question-text" id="solo-question-text">
+            Cargando pregunta...
+          </p>
+
+          <div class="card-instructions">
+            <span>🧊 Toca la tarjeta o presiona Siguiente para romper el hielo</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-actions-bar">
+        <button type="button" class="btn btn-secondary" id="btn-solo-prev" title="Pregunta anterior">
+          <span>◀</span> Anterior
+        </button>
+        <button type="button" class="btn btn-primary" id="btn-solo-next">
+          <span>Siguiente Pregunta</span> <span>▶</span>
+        </button>
+        <button type="button" class="btn btn-secondary" id="btn-solo-toggle-turn" title="Cambiar turno de jugador">
+          <span>🔄</span> Cambiar Turno
+        </button>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: MULTIPLAYER LOBBY (SALA DE ESPERA)
+         ========================================== -->
+    <section id="view-lobby" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-back-lobby">← Salir al Menú</button>
+        <button type="button" class="btn-icon" id="btn-lobby-tv-shortcut" title="Ver esta sala en Modo TV">📺</button>
+      </div>
+
+      <!-- State: Join or Create Room Form -->
+      <div class="room-box" id="lobby-join-create-box">
+        <h2 style="font-family: var(--font-display); font-size: 24px; margin-bottom: 8px; text-align: center;">
+          Salas Multicelular en Vivo 👥
+        </h2>
+        <p style="color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 20px;">
+          Juega con tus amigos o compañeros conectando múltiples celulares a la misma sala.
+        </p>
+
+        <!-- Invited Banner (if coming via link) -->
+        <div id="invited-room-banner" style="display: none; background: rgba(16, 185, 129, 0.15); border: 1.5px solid var(--emerald); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 18px; text-align: center;">
+          <span style="font-size: 22px;">🎉</span>
+          <div style="font-weight: 800; font-size: 15px; color: #a7f3d0; margin-top: 2px;">
+            ¡Te han invitado a la sala: <strong id="lbl-invited-room-code" style="color: #fff; letter-spacing: 1px;">HIELO</strong>!
+          </div>
+          <small style="color: var(--text-muted); font-size: 12.5px;">Ingresa tu nombre y presiona el botón para entrar directo a jugar.</small>
+        </div>
+
+        <!-- Player Name and Avatar -->
+        <div style="margin-bottom: 18px;">
+          <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">
+            Tu Nombre o Apodo:
+          </label>
+          <input type="text" class="input-field" id="input-player-name" placeholder="Ej: Camilo, Vale, Nacho..." maxlength="25" required>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">
+            Elige tu Avatar:
+          </label>
+          <div class="avatar-selector" id="avatar-picker">
+            <button type="button" class="avatar-opt selected" data-avatar="🦊">🦊</button>
+            <button type="button" class="avatar-opt" data-avatar="🧊">🧊</button>
+            <button type="button" class="avatar-opt" data-avatar="🚀">🚀</button>
+            <button type="button" class="avatar-opt" data-avatar="🎭">🎭</button>
+            <button type="button" class="avatar-opt" data-avatar="🦄">🦄</button>
+            <button type="button" class="avatar-opt" data-avatar="⚡">⚡</button>
+            <button type="button" class="avatar-opt" data-avatar="🍕">🍕</button>
+            <button type="button" class="avatar-opt" data-avatar="👑">👑</button>
+            <button type="button" class="avatar-opt" data-avatar="👻">👻</button>
+            <button type="button" class="avatar-opt" data-avatar="🥑">🥑</button>
+          </div>
+        </div>
+
+        <!-- Gender / Sex Selector for Cross-Secrets Dynamic -->
+        <div style="margin-bottom: 22px;">
+          <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">
+            Tu Género / Sexo (para estadísticas y dinámicas de grupo):
+          </label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+            <label class="gender-radio-pill selected" id="opt-gender-h">
+              <input type="radio" name="player-gender" value="hombre" checked style="display:none;">
+              <span>👨 Hombre</span>
+            </label>
+            <label class="gender-radio-pill" id="opt-gender-m">
+              <input type="radio" name="player-gender" value="mujer" style="display:none;">
+              <span>👩 Mujer</span>
+            </label>
+            <label class="gender-radio-pill" id="opt-gender-o">
+              <input type="radio" name="player-gender" value="otro" style="display:none;">
+              <span>🌈 Otro</span>
+            </label>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px;">
+          <button type="button" class="btn btn-primary" id="btn-create-room">
+            ✨ Crear Nueva Sala
+          </button>
+          <button type="button" class="btn btn-secondary" id="btn-toggle-join-mode">
+            🔗 Unirse con Código
+          </button>
+        </div>
+
+        <div id="join-code-container" style="display: none; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <label style="display: block; font-size: 13px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;">
+            Código de la Sala (5 letras):
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" class="input-field" id="input-room-code" placeholder="Ej: HIELO" maxlength="6" style="text-transform: uppercase; font-weight: 800; letter-spacing: 2px;">
+            <button type="button" class="btn btn-purple" id="btn-submit-join">
+              Entrar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- State: Inside Room Waiting Area -->
+      <div class="room-box" id="lobby-active-room-box" style="display: none;">
+        <div style="text-align: center;">
+          <span style="font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em;">
+            CÓDIGO DE LA SALA
+          </span>
+          <div class="room-code-badge" id="btn-copy-room-code" title="Toca para copiar código o enlace">
+            <span class="room-code-value" id="lbl-room-code">------</span>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+              📋 Toca para copiar código
+            </div>
+          </div>
+
+          <!-- Share via WhatsApp & Link Buttons -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 6px;">
+            <button type="button" class="btn" id="btn-share-whatsapp" style="background: linear-gradient(135deg, #25d366 0%, #128c7e 100%); color: #ffffff; font-size: 13.5px; padding: 11px 12px; font-weight: 800; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.35);">
+              <span>💬 Enviar por WhatsApp</span>
+            </button>
+            <button type="button" class="btn btn-secondary" id="btn-share-copy-link" style="font-size: 13px; padding: 11px 12px;">
+              <span>🔗 Copiar Enlace Directo</span>
+            </button>
+          </div>
+        </div>
+
+        <div style="margin: 20px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h4 style="font-size: 14px; font-weight: 700; color: var(--text-muted);">
+              Jugadores Conectados (<span id="lbl-player-count">0</span>):
+            </h4>
+            <span id="lbl-host-indicator" style="font-size: 12px; color: var(--cyan);"></span>
+          </div>
+          <div class="players-pill-list" id="room-players-list">
+            <!-- Dynamically populated with player chips -->
+          </div>
+        </div>
+
+        <!-- Host Game Mode Selector -->
+        <div id="host-game-controls" style="border-top: 1px solid var(--border-subtle); padding-top: 18px; margin-top: 18px;">
+          <h4 style="font-size: 15px; font-weight: 800; margin-bottom: 10px;">
+            🎮 Elige la Dinámica Grupal:
+          </h4>
+
+          <div class="dynamics-grid">
+            <div class="dynamic-card-radio selected" data-mode="secretos_cruzados" style="border-color: var(--coral); background: rgba(244, 63, 94, 0.15);">
+              <div style="font-size: 24px; margin-bottom: 6px;">🔥</div>
+              <strong style="display: block; font-size: 14px; color: #fda4af;">Secretos Cruzados (Íntimo)</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">Votos anónimos Sí/No desglosados por sexo/género. ¡Descubre los secretos sin saber quién fue!</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="confesiones">
+              <div style="font-size: 24px; margin-bottom: 6px;">🕵️</div>
+              <strong style="display: block; font-size: 14px;">Confesiones Anónimas</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">Todos confiesan en secreto y votan de quién es cada una.</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="tres_confesiones">
+              <div style="font-size: 24px; margin-bottom: 6px;">🎭</div>
+              <strong style="display: block; font-size: 14px;">Las 3 Confesiones</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">2 mentiras y 1 verdad. Todos adivinan la única real.</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="muro_bano">
+              <div style="font-size: 24px; margin-bottom: 6px;">🧱</div>
+              <strong style="display: block; font-size: 14px;">Muro de Desahogo</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">Graffitis y notas anónimas en vivo en la pantalla.</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="duo_sync">
+              <div style="font-size: 24px; margin-bottom: 6px;">⚡</div>
+              <strong style="display: block; font-size: 14px;">Dúo Sincronizado</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">Para 2 celulares: responden en secreto y se revelan a la vez.</small>
+            </div>
+
+            <div class="dynamic-card-radio" data-mode="feedback_equipo">
+              <div style="font-size: 24px; margin-bottom: 6px;">🌟</div>
+              <strong style="display: block; font-size: 14px;">Muro 360 de Empresa</strong>
+              <small style="color: var(--text-muted); font-size: 12px;">3 cosas positivas y 1 divertida/constructiva por colega.</small>
+            </div>
+          </div>
+
+          <div style="margin: 14px 0 10px; background: var(--bg-surface-elevated); padding: 12px 14px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between;">
+            <label for="chk-reveal-truth" style="font-size: 13.5px; font-weight: 600; cursor: pointer;">
+              Revelar autor al final (Modalidad con revelación)
+            </label>
+            <input type="checkbox" id="chk-reveal-truth" checked style="width: 18px; height: 18px; accent-color: var(--purple); cursor: pointer;">
+          </div>
+
+          <!-- Switch para activar/desactivar desglose por sexo/género -->
+          <div style="margin: 10px 0; background: var(--bg-surface-elevated); padding: 12px 14px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <label for="chk-reveal-gender" style="font-size: 13.5px; font-weight: 600; cursor: pointer; display: block;">
+                🚻 Desglose de resultados por sexo/género
+              </label>
+              <small style="color: var(--text-muted); font-size: 11.5px;">Si se desactiva, solo se verá el total global anónimo.</small>
+            </div>
+            <input type="checkbox" id="chk-reveal-gender" checked style="width: 18px; height: 18px; accent-color: var(--coral); cursor: pointer;">
+          </div>
+
+          <!-- Advertencia en vivo si solo hay 1 hombre o solo 1 mujer -->
+          <div id="single-gender-warning-box" style="display: none; background: rgba(245, 158, 11, 0.15); border: 1.5px solid rgba(245, 158, 11, 0.6); border-radius: var(--radius-md); padding: 12px 14px; margin: 12px 0;">
+            <div style="display: flex; gap: 8px; align-items: flex-start;">
+              <span style="font-size: 20px;">⚠️</span>
+              <div style="font-size: 13px; line-height: 1.45; color: #fde68a;">
+                <strong id="lbl-single-gender-title" style="display: block; margin-bottom: 2px;">Aviso de Privacidad por Género:</strong>
+                <span id="lbl-single-gender-desc">
+                  Hay solo 1 hombre o 1 mujer en la sala. Al activar el desglose por sexo, aunque sea anónimo, su respuesta se podrá deducir fácilmente.
+                </span>
+                <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
+                  💡 Consejo: Puedes desmarcar el desglose arriba para proteger su anonimato total.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn btn-purple btn-block" id="btn-start-dynamic">
+            🚀 Iniciar Dinámica para Todos
+          </button>
+        </div>
+
+        <div id="non-host-wait-msg" style="display: none; text-align: center; padding: 20px 0; color: var(--text-muted);">
+          <div style="font-size: 32px; animation: icePulse 2s infinite;">⏳</div>
+          <p style="margin-top: 10px; font-size: 14px;">Esperando que el anfitrión elija la dinámica y comience el juego...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: GAMEPLAY - CONFESIONES SECRETAS
+         ========================================== -->
+    <section id="view-game-confesiones" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-leave-game">← Volver a la Sala</button>
+        <span class="turn-pill">🕵️ Confesiones Secretas</span>
+      </div>
+
+      <div class="game-dynamic-box">
+        <!-- Step 1: Write confession -->
+        <div id="confesion-step-write" class="room-box">
+          <h3 style="font-family: var(--font-display); font-size: 22px; margin-bottom: 8px; text-align: center;">
+            Escribe tu Confesión Secreta 🤫
+          </h3>
+
+          <!-- Dynamic Privacy Notice Badge -->
+          <div id="confesion-privacy-notice-badge" style="background: rgba(245, 158, 11, 0.15); border: 1.5px solid rgba(245, 158, 11, 0.5); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 16px; text-align: center;">
+            <span id="lbl-confesion-privacy-icon">👀</span>
+            <span id="lbl-confesion-privacy-text" style="font-size: 13px; font-weight: 700; color: #fde68a;">
+              Atención: En esta confesión los nombres de los que confiesan SERÁN REVELADOS al final.
+            </span>
+          </div>
+
+          <p style="color: var(--text-muted); font-size: 13.5px; text-align: center; margin-bottom: 18px;">
+            Puede ser algo vergonzoso, una anécdota loca o algo que nadie en el grupo sepa.
+          </p>
+
+          <textarea id="txt-player-confession" class="input-field" rows="4" placeholder="Ej: Yo una vez besé a alguien de este grupo... / Yo una vez robé un adorno en una fiesta..." maxlength="200" style="resize: none;"></textarea>
+
+          <button type="button" class="btn btn-purple btn-block" id="btn-submit-confession" style="margin-top: 16px;">
+            🔒 Enviar en Secreto
+          </button>
+
+          <div id="confession-submitted-wait" style="display: none; text-align: center; margin-top: 18px; color: var(--emerald);">
+            ✓ ¡Confesión enviada! Esperando que el resto de los participantes termine...
+          </div>
+        </div>
+
+        <!-- Step 2: Voting whose confession it is -->
+        <div id="confesion-step-vote" class="room-box" style="display: none;">
+          <div style="text-align: center; font-size: 13px; font-weight: 700; color: var(--purple); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;">
+            ¿DE QUIÉN ES ESTA CONFESIÓN?
+          </div>
+
+          <div class="confession-card-reveal">
+            <span style="font-size: 32px;">💬</span>
+            <div class="confession-quote" id="lbl-current-confession-text">
+              "..."
+            </div>
+          </div>
+
+          <p style="font-size: 14px; font-weight: 700; text-align: center; margin-bottom: 12px; color: var(--text-muted);">
+            Vota por el sospechoso:
+          </p>
+
+          <div class="voting-options-grid" id="confession-suspects-grid">
+            <!-- Dynamically populated with player buttons -->
+          </div>
+
+          <div id="vote-submitted-feedback" style="display: none; text-align: center; color: var(--cyan); font-weight: 600; margin-top: 12px;">
+            ✓ Voto registrado. Esperando al grupo...
+          </div>
+        </div>
+
+        <!-- Step 3: Reveal and Stats -->
+        <div id="confesion-step-results" class="room-box" style="display: none;">
+          <h3 style="font-family: var(--font-display); font-size: 22px; text-align: center; margin-bottom: 6px;">
+            📊 Resultados de las Sospechas
+          </h3>
+          <p style="text-align: center; color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">
+            Así votó el grupo para esta confesión:
+          </p>
+
+          <div class="results-bars-list" id="confession-results-bars">
+            <!-- Dynamically populated with vote bars -->
+          </div>
+
+          <div id="confession-real-author-box" style="display: none; background: rgba(168, 85, 247, 0.2); border: 1.5px solid var(--purple); border-radius: var(--radius-lg); padding: 18px; text-align: center; margin: 20px 0;">
+            <div style="font-size: 13px; font-weight: 700; color: #d8b4fe; text-transform: uppercase;">
+              💥 LA CONFESIÓN ERA DE:
+            </div>
+            <div style="font-size: 28px; font-weight: 900; color: #ffffff; margin-top: 4px;" id="lbl-real-author-name">
+              ...
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 18px;">
+            <button type="button" class="btn btn-purple btn-block" id="btn-host-reveal-author">
+              👀 Revelar Quién Fue
+            </button>
+            <button type="button" class="btn btn-primary btn-block" id="btn-next-confession-round">
+              Siguiente Confesión ➔
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: GAMEPLAY - LAS 3 CONFESIONES (2 MENTIRAS 1 VERDAD)
+         ========================================== -->
+    <section id="view-game-tres-confesiones" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-leave-tres-confesiones">← Volver a la Sala</button>
+        <span class="turn-pill">🎭 Las 3 Confesiones</span>
+      </div>
+
+      <div class="game-dynamic-box">
+        <!-- Writing 3 statements -->
+        <div id="tres-step-write" class="room-box">
+          <h3 style="font-family: var(--font-display); font-size: 22px; text-align: center; margin-bottom: 8px;">
+            Escribe 3 Afirmaciones sobre ti 🎭
+          </h3>
+
+          <div style="background: rgba(245, 158, 11, 0.15); border: 1.5px solid rgba(245, 158, 11, 0.5); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 16px; text-align: center;">
+            <span>👀</span>
+            <span style="font-size: 13px; font-weight: 700; color: #fde68a;">
+              Recuerda: Esta dinámica es con REVELACIÓN. Al votar, se proyectarán tus afirmaciones con tu nombre y se revelará cuál era tu verdad.
+            </span>
+          </div>
+
+          <p style="color: var(--text-muted); font-size: 13.5px; text-align: center; margin-bottom: 18px;">
+            2 deben ser mentiras creíbles y solo <strong>1 debe ser 100% REAL</strong>. Marca cuál es la verdadera.
+          </p>
+
+          <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px;">
+            <div style="background: var(--bg-surface-elevated); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+              <label style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 6px;">
+                <span>Afirmación A:</span>
+                <span style="color: var(--emerald); display: flex; align-items: center; gap: 4px;">
+                  <input type="radio" name="radio-real-statement" value="0" checked> Es la REAL
+                </span>
+              </label>
+              <input type="text" class="input-field" id="txt-statement-0" placeholder="Ej: Me rompí el brazo saltando en paracaídas" maxlength="120">
+            </div>
+
+            <div style="background: var(--bg-surface-elevated); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+              <label style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 6px;">
+                <span>Afirmación B:</span>
+                <span style="color: var(--emerald); display: flex; align-items: center; gap: 4px;">
+                  <input type="radio" name="radio-real-statement" value="1"> Es la REAL
+                </span>
+              </label>
+              <input type="text" class="input-field" id="txt-statement-1" placeholder="Ej: Fui extra en un comercial de televisión" maxlength="120">
+            </div>
+
+            <div style="background: var(--bg-surface-elevated); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+              <label style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 6px;">
+                <span>Afirmación C:</span>
+                <span style="color: var(--emerald); display: flex; align-items: center; gap: 4px;">
+                  <input type="radio" name="radio-real-statement" value="2"> Es la REAL
+                </span>
+              </label>
+              <input type="text" class="input-field" id="txt-statement-2" placeholder="Ej: Le tengo fobia irracional a las aceitunas" maxlength="120">
+            </div>
+          </div>
+
+          <button type="button" class="btn btn-purple btn-block" id="btn-submit-tres-statements">
+            🔒 Guardar mis 3 Afirmaciones
+          </button>
+        </div>
+
+        <!-- Voting which statement is real -->
+        <div id="tres-step-vote" class="room-box" style="display: none;">
+          <div style="text-align: center; font-size: 13px; font-weight: 700; color: var(--purple); margin-bottom: 4px;">
+            TURNO DE:
+          </div>
+          <h3 style="font-family: var(--font-display); font-size: 24px; text-align: center; margin-bottom: 16px;" id="lbl-tres-player-name">
+            ...
+          </h3>
+
+          <p style="text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 18px;">
+            ¿Cuál de estas 3 afirmaciones crees que es la <strong>ÚNICA REAL</strong>?
+          </p>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;" id="tres-statements-vote-list">
+            <!-- Dynamically populated buttons for statement 0, 1, 2 -->
+          </div>
+
+          <div id="tres-vote-feedback" style="display: none; text-align: center; color: var(--cyan); margin-top: 14px; font-weight: 600;">
+            ✓ ¡Voto recibido!
+          </div>
+
+          <!-- Reveal button for Host -->
+          <div id="tres-host-controls" style="margin-top: 24px; display: flex; gap: 10px;">
+            <button type="button" class="btn btn-purple btn-block" id="btn-reveal-real-statement">
+              🎉 Revelar Cuál es la Verdad
+            </button>
+            <button type="button" class="btn btn-primary btn-block" id="btn-next-tres-player">
+              Siguiente Jugador ➔
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: GAMEPLAY - MURO DE BAÑO / DESAHOGO
+         ========================================== -->
+    <section id="view-game-muro" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-leave-muro">← Volver a la Sala</button>
+        <span class="turn-pill">🧱 Muro de Baño en Vivo</span>
+      </div>
+
+      <div class="room-box" style="margin-bottom: 20px;">
+        <h3 style="font-size: 18px; font-weight: 800; margin-bottom: 6px;">
+          Escribe en el Muro (100% Anónimo) ✍️
+        </h3>
+
+        <div style="background: rgba(16, 185, 129, 0.15); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: var(--radius-md); padding: 8px 12px; margin-bottom: 12px; text-align: center;">
+          <span>🛡️</span>
+          <span style="font-size: 12.5px; font-weight: 700; color: #a7f3d0;">
+            Garantía 100% Anónima: Tu nombre NO se guardará ni se mostrará a nadie. ¡Exprésate sin filtro!
+          </span>
+        </div>
+
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
+          Frases, desahogos, piropos secretos o anécdotas de la fiesta. Aparecen de inmediato en el proyector de todos.
+        </p>
+
+        <div style="display: flex; gap: 8px;">
+          <input type="text" class="input-field" id="input-muro-note" placeholder="Escribe lo que quieras sin filtro..." maxlength="140">
+          <button type="button" class="btn btn-primary" id="btn-post-muro-note">
+            Publicar
+          </button>
+        </div>
+      </div>
+
+      <div class="wall-container" id="muro-notes-wall">
+        <!-- Dynamically populated floating graffiti notes -->
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: GAMEPLAY - DÚO SINCRONIZADO
+         ========================================== -->
+    <section id="view-game-duo" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-leave-duo">← Volver a la Sala</button>
+        <span class="turn-pill">⚡ Dúo Sincronizado</span>
+      </div>
+
+      <div class="game-dynamic-box room-box">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <span style="font-size: 12px; font-weight: 700; color: var(--cyan); text-transform: uppercase;">
+            PREGUNTA COMPARTIDA
+          </span>
+          <h3 style="font-family: var(--font-display); font-size: 24px; margin-top: 6px;" id="lbl-duo-question">
+            "¿Quién de los dos tiene mejor sentido del humor?"
+          </h3>
+        </div>
+
+        <div id="duo-input-area" style="margin-bottom: 20px;">
+          <label style="display: block; font-size: 13.5px; font-weight: 700; margin-bottom: 8px;">
+            Escribe tu respuesta secreta:
+          </label>
+          <input type="text" class="input-field" id="txt-duo-answer" placeholder="Tu respuesta sincera..." maxlength="100">
+          <button type="button" class="btn btn-purple btn-block" id="btn-submit-duo-answer" style="margin-top: 12px;">
+            🔒 ¡Listo! Bloquear mi respuesta
+          </button>
+        </div>
+
+        <!-- Waiting lock -->
+        <div id="duo-lock-status" style="display: none; text-align: center; padding: 24px 0;">
+          <div style="font-size: 48px; animation: icePulse 1.5s infinite;">🔐</div>
+          <h4 style="margin: 12px 0 6px; font-size: 18px;">Esperando que ambos respondan...</h4>
+          <p style="color: var(--text-muted); font-size: 13.5px;">En cuanto tu acompañante presione "Listo", ¡ambas respuestas se destaparán juntas!</p>
+        </div>
+
+        <!-- Revealed answers -->
+        <div id="duo-revealed-answers" style="display: none; margin-top: 20px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px;">
+            <div style="background: var(--bg-surface-elevated); padding: 18px; border-radius: var(--radius-md); border: 1.5px solid var(--cyan); text-align: center;">
+              <span style="font-size: 12px; font-weight: 700; color: var(--cyan); text-transform: uppercase;" id="lbl-duo-p1-name">Jugador 1</span>
+              <div style="font-size: 18px; font-weight: 800; margin-top: 8px;" id="lbl-duo-p1-ans">...</div>
+            </div>
+            <div style="background: var(--bg-surface-elevated); padding: 18px; border-radius: var(--radius-md); border: 1.5px solid var(--pink); text-align: center;">
+              <span style="font-size: 12px; font-weight: 700; color: var(--pink); text-transform: uppercase;" id="lbl-duo-p2-name">Jugador 2</span>
+              <div style="font-size: 18px; font-weight: 800; margin-top: 8px;" id="lbl-duo-p2-ans">...</div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary btn-block" id="btn-duo-next-question">
+            Siguiente Dilema ➔
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: GAMEPLAY - SECRETOS CRUZADOS & ÍNTIMOS
+         ========================================== -->
+    <section id="view-game-secretos" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-leave-secretos">← Volver a la Sala</button>
+        <span class="turn-pill" style="border-color: var(--coral); color: var(--coral);">🔥 Secretos Cruzados</span>
+      </div>
+
+      <div class="game-dynamic-box room-box">
+        <!-- Question Badge & Counter -->
+        <div style="text-align: center; margin-bottom: 12px;">
+          <span style="font-size: 11px; font-weight: 800; color: var(--coral); text-transform: uppercase; letter-spacing: 0.08em; background: rgba(244, 63, 94, 0.15); padding: 4px 12px; border-radius: 20px;">
+            DECLARACIÓN ÍNTIMA ANÓNIMA • <span id="lbl-secretos-counter">1 de 50</span>
+          </span>
+        </div>
+
+        <!-- Privacy Badge -->
+        <div style="background: rgba(16, 185, 129, 0.15); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: var(--radius-md); padding: 8px 12px; margin-bottom: 14px; text-align: center;">
+          <span>🛡️</span>
+          <span style="font-size: 12.5px; font-weight: 700; color: #a7f3d0;">
+            Votación 100% Anónima: Nadie sabrá tu voto individual. Solo se revelarán estadísticas grupales por género.
+          </span>
+        </div>
+
+        <!-- The Statement Card -->
+        <div class="confession-card-reveal" style="border-color: rgba(244, 63, 94, 0.45); box-shadow: 0 15px 35px rgba(244, 63, 94, 0.15);">
+          <div style="font-size: 38px; margin-bottom: 6px;">🤫</div>
+          <div class="confession-quote" id="lbl-secreto-statement" style="font-size: clamp(20px, 4.8vw, 28px); color: #fff;">
+            "He besado en los labios a alguien de mi mismo sexo."
+          </div>
+          <div style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">
+            Tu voto es 100% anónimo. Solo se calculará la estadística global y por género del grupo.
+          </div>
+        </div>
+
+        <!-- Alerta si este jugador es el único hombre o mujer -->
+        <div id="secretos-single-gender-notice" style="display: none; background: rgba(245, 158, 11, 0.15); border: 1.5px solid rgba(245, 158, 11, 0.6); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 16px; text-align: center;">
+          <span style="font-size: 18px;">⚠️</span>
+          <span id="lbl-secretos-single-gender-text" style="font-size: 12.5px; font-weight: 700; color: #fde68a;">
+            Aviso de Deducción: Eres la única persona de tu género en la sala. Al estar activo el desglose por sexo, el grupo podría deducir tu respuesta.
+          </span>
+        </div>
+
+        <!-- Voting Buttons -->
+        <div id="secretos-voting-controls" style="margin-bottom: 20px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <button type="button" class="btn btn-primary" id="btn-secreto-vote-yes" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); font-size: 17px; padding: 18px 12px; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);">
+              ✅ SÍ, lo he hecho
+            </button>
+            <button type="button" class="btn btn-danger" id="btn-secreto-vote-no" style="font-size: 17px; padding: 18px 12px;">
+              ❌ NO, jamás
+            </button>
+          </div>
+        </div>
+
+        <!-- Status after voting -->
+        <div id="secretos-voted-status" style="display: none; text-align: center; padding: 10px 0; color: var(--cyan); font-weight: 700;">
+          ✓ ¡Tu voto ha sido registrado! Esperando al resto del grupo...
+        </div>
+
+        <!-- Anonymous Results Breakdown by Gender -->
+        <div id="secretos-results-box" style="margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border-subtle); display: none;">
+          <h4 style="font-size: 16px; font-weight: 800; text-align: center; margin-bottom: 14px;">
+            📊 Resultados Anónimos del Grupo:
+          </h4>
+
+          <!-- Global Big Summary -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;">
+            <div style="background: rgba(16, 185, 129, 0.15); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: var(--radius-md); padding: 14px; text-align: center;">
+              <div style="font-size: 32px; font-weight: 900; color: var(--emerald);" id="lbl-secretos-total-yes">0</div>
+              <span style="font-size: 13px; font-weight: 700; color: #a7f3d0;">Dijeron SÍ</span>
+            </div>
+            <div style="background: rgba(239, 68, 68, 0.15); border: 1.5px solid rgba(239, 68, 68, 0.4); border-radius: var(--radius-md); padding: 14px; text-align: center;">
+              <div style="font-size: 32px; font-weight: 900; color: var(--coral);" id="lbl-secretos-total-no">0</div>
+              <span style="font-size: 13px; font-weight: 700; color: #fecdd3;">Dijeron NO</span>
+            </div>
+          </div>
+
+          <!-- Gender Breakdown Cards (Ocultable si se desactiva) -->
+          <div id="secretos-gender-breakdown-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+            <!-- Hombres -->
+            <div class="result-bar-item" style="padding: 14px 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                  👨 Hombres del grupo:
+                </span>
+                <span id="lbl-secretos-hombres-stats" style="font-weight: 800; color: var(--cyan);">
+                  0 de 0 dijeron Sí
+                </span>
+              </div>
+              <div style="background: rgba(255, 255, 255, 0.08); height: 8px; border-radius: 4px; overflow: hidden;">
+                <div id="bar-secretos-hombres" style="background: var(--cyan); height: 100%; width: 0%; transition: width 0.8s ease;"></div>
+              </div>
+            </div>
+
+            <!-- Mujeres -->
+            <div class="result-bar-item" style="padding: 14px 16px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                  👩 Mujeres del grupo:
+                </span>
+                <span id="lbl-secretos-mujeres-stats" style="font-weight: 800; color: var(--pink);">
+                  0 de 0 dijeron Sí
+                </span>
+              </div>
+              <div style="background: rgba(255, 255, 255, 0.08); height: 8px; border-radius: 4px; overflow: hidden;">
+                <div id="bar-secretos-mujeres" style="background: var(--pink); height: 100%; width: 0%; transition: width 0.8s ease;"></div>
+              </div>
+            </div>
+
+            <!-- Otro / No binario (si hay participantes) -->
+            <div class="result-bar-item" id="row-secretos-otros" style="padding: 14px 16px; display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                  🌈 Otros participantes:
+                </span>
+                <span id="lbl-secretos-otros-stats" style="font-weight: 800; color: #a855f7;">
+                  0 de 0 dijeron Sí
+                </span>
+              </div>
+              <div style="background: rgba(255, 255, 255, 0.08); height: 8px; border-radius: 4px; overflow: hidden;">
+                <div id="bar-secretos-otros" style="background: #a855f7; height: 100%; width: 0%; transition: width 0.8s ease;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Suspense / Mystery Comment box -->
+          <div id="secretos-suspense-box" style="background: rgba(244, 63, 94, 0.12); border: 1.5px dashed rgba(244, 63, 94, 0.4); border-radius: var(--radius-md); padding: 14px; text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 20px; display: block; margin-bottom: 4px;">👀</span>
+            <div id="lbl-secretos-intrigue-text" style="font-weight: 700; font-size: 14.5px; color: #fda4af;">
+              ¡Calculando la intriga del grupo...!
+            </div>
+          </div>
+
+          <!-- Controls to advance -->
+          <button type="button" class="btn btn-purple btn-block" id="btn-next-secreto" style="background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);">
+            🔥 Siguiente Pregunta Íntima ➔
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW: BIG SCREEN / TV / PROYECTOR MODE
+         ========================================== -->
+    <section id="view-tv" class="view-screen">
+      <div class="tv-screen-layout">
+        <!-- Top bar with code and QR -->
+        <div class="tv-top-bar">
+          <div class="brand">
+            <span class="brand-icon">🧊</span>
+            <span class="brand-title" style="font-size: 26px;">RompeHielos TV</span>
+          </div>
+
+          <div class="tv-code-cta">
+            <div style="text-align: right;">
+              <div style="font-size: 13px; font-weight: 700; color: var(--text-dim);">ÚNETE DESDE TU CELULAR:</div>
+              <div style="font-family: var(--font-display); font-size: 38px; font-weight: 900; color: var(--cyan); letter-spacing: 2px;" id="tv-room-code-display">
+                HIELO
+              </div>
+            </div>
+            <div class="tv-qr-box" id="tv-qr-container">
+              <!-- Dynamically populated QR code -->
+            </div>
+            <button type="button" class="btn btn-secondary" id="btn-close-tv" style="padding: 8px 12px;">✕ Salir TV</button>
+          </div>
+        </div>
+
+        <!-- TV Central Stage -->
+        <div class="tv-main-stage">
+          <div id="tv-stage-content">
+            <div style="font-size: 72px; margin-bottom: 14px;">🧊</div>
+            <h2 class="tv-giant-text" id="tv-main-headline">
+              Escanea el código QR o entra a la web con el código para participar
+            </h2>
+            <div class="players-pill-list" id="tv-players-list" style="justify-content: center; max-width: 700px;">
+              <!-- Connected players -->
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; color: var(--text-dim); font-size: 14px; padding: 10px;">
+          RompeHielos • Modo Proyección de Sala • Los resultados y confesiones se actualizan en vivo
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================
+       MODAL: ADMIN (GESTIÓN DE PREGUNTAS)
+       ========================================== -->
+  <div class="modal-overlay" id="modal-admin">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="font-family: var(--font-display); font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+          🔐 Panel de Administración de Preguntas
+        </h3>
+        <button type="button" class="btn-icon" id="btn-close-admin">✕</button>
+      </div>
+
+      <!-- Login Form (if not authenticated) -->
+      <div id="admin-login-box">
+        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">
+          Ingresa tus credenciales para agregar, editar o eliminar categorías y preguntas:
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+          <input type="text" class="input-field" id="admin-user-input" placeholder="Usuario (defecto: admin)">
+          <input type="password" class="input-field" id="admin-pass-input" placeholder="Contraseña (defecto: hielo2025)">
+        </div>
+        <button type="button" class="btn btn-primary btn-block" id="btn-admin-login">
+          Iniciar Sesión como Administrador
+        </button>
+      </div>
+
+      <!-- Admin Management Panel (after login) -->
+      <div id="admin-panel-box" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle);">
+          <div>
+            <strong style="color: var(--emerald);">✓ Sesión Activa</strong>
+            <div style="font-size: 12px; color: var(--text-muted);">Puedes modificar las preguntas para toda la app.</div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-secondary" id="btn-admin-restore-defaults" style="font-size: 12px; padding: 6px 10px;">
+              🔄 Restaurar Oficiales
+            </button>
+            <button type="button" class="btn btn-danger" id="btn-admin-logout" style="font-size: 12px; padding: 6px 10px;">
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <!-- Category Selector -->
+        <div style="margin-bottom: 18px;">
+          <label style="display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px;">
+            Seleccionar Categoría:
+          </label>
+          <select id="admin-select-category" class="input-field" style="cursor: pointer;">
+            <!-- Dynamically populated -->
+          </select>
+        </div>
+
+        <!-- Add New Question -->
+        <div style="background: var(--bg-surface-elevated); padding: 14px; border-radius: var(--radius-md); margin-bottom: 20px;">
+          <label style="display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px;">
+            + Agregar Pregunta a esta categoría:
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" class="input-field" id="admin-input-new-question" placeholder="Escribe la nueva pregunta..." maxlength="300">
+            <button type="button" class="btn btn-primary" id="btn-admin-add-question">
+              Agregar
+            </button>
+          </div>
+        </div>
+
+        <!-- List of Questions in Category -->
+        <h4 style="font-size: 14px; font-weight: 800; margin-bottom: 10px; color: var(--text-muted);">
+          Preguntas de la categoría (<span id="admin-questions-count">0</span>):
+        </h4>
+        <div id="admin-questions-list" style="max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+          <!-- Dynamically populated list -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-notice" id="toast-notice">
+    <span id="toast-icon">✨</span>
+    <span id="toast-msg">Mensaje</span>
+  </div>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <div class="footer-links">
+      <button type="button" class="footer-link-btn" id="footer-btn-solo">Modo 1 Celular</button>
+      <span>•</span>
+      <button type="button" class="footer-link-btn" id="footer-btn-multi">Salas Multijugador</button>
+      <span>•</span>
+      <button type="button" class="footer-link-btn" id="footer-btn-admin">Admin</button>
+    </div>
+    <div>RompeHielos • Rompe el hielo donde sea, cuando sea 🧊</div>
+  </footer>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>
