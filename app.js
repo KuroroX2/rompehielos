@@ -62,12 +62,60 @@ function loadStoredCategories() {
   return JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
 }
 
-function saveCategories(cats) {
+// Sincronización en tiempo real del Banco de Preguntas en la Nube (Firestore)
+async function syncCategoriesWithFirestore() {
+  if (!firestoreAvailable || !db) return;
+
+  try {
+    const configDocRef = doc(db, "configuracion", "banco_preguntas");
+    onSnapshot(configDocRef, (snap) => {
+      if (snap.exists()) {
+        const cloudData = snap.data();
+        if (Array.isArray(cloudData.categories) && cloudData.categories.length > 0) {
+          categories = cloudData.categories;
+          localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
+          renderSoloCategories();
+          if (document.getElementById("view-solo")?.classList.contains("active")) {
+            updateSoloCard();
+          }
+          if (isAdminLoggedIn) {
+            const select = document.getElementById("admin-select-category");
+            if (select) renderAdminQuestionsList(select.value);
+          }
+          const cloudStatusEl = document.getElementById("lbl-admin-cloud-status");
+          if (cloudStatusEl) {
+            cloudStatusEl.textContent = "☁️ Nube Activa (Sincronizado)";
+            cloudStatusEl.style.color = "#34d399";
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.warn("No se pudo conectar al banco de preguntas en Firestore:", err);
+  }
+}
+
+async function saveCategories(cats, syncCloud = true) {
   categories = cats;
   try {
     localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(cats));
   } catch (e) {
-    console.error("Error guardando categorías:", e);
+    console.error("Error guardando categorías en localStorage:", e);
+  }
+
+  // Guardar en la Nube (Firestore) para que impacte a TODOS los usuarios en cualquier dispositivo
+  if (syncCloud && firestoreAvailable && db) {
+    try {
+      const configDocRef = doc(db, "configuracion", "banco_preguntas");
+      await setDoc(configDocRef, {
+        categories: cats,
+        updatedAt: serverTimestamp(),
+      });
+      console.log("☁️ Preguntas guardadas en Firestore para todos los jugadores.");
+      showToast("Guardado en la Nube para todos los jugadores ☁️", "✓");
+    } catch (err) {
+      console.warn("Aviso al guardar en Firestore:", err);
+    }
   }
 }
 
@@ -1864,6 +1912,28 @@ document.getElementById("btn-admin-add-question")?.addEventListener("click", () 
   }
 });
 
+// Sincronizar manualmente con la Nube (Firestore)
+document.getElementById("btn-admin-sync-cloud")?.addEventListener("click", async () => {
+  showToast("Subiendo todas las preguntas a Firebase Firestore...", "⏳");
+  await saveCategories(categories, true);
+  showToast("¡Banco de preguntas 100% sincronizado en la Nube!", "☁️");
+});
+
+// Exportar archivo questions-data.js descargable
+document.getElementById("btn-admin-export-code")?.addEventListener("click", () => {
+  const codeContent = `// questions-data.js - Banco oficial de RompeHielos\nexport const DEFAULT_CATEGORIES = ${JSON.stringify(categories, null, 2)};\n`;
+  const blob = new Blob([codeContent], { type: "application/javascript" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "questions-data.js";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast("Descargando questions-data.js con tus preguntas filtradas...", "💾");
+});
+
 // Restaurar oficiales
 document.getElementById("btn-admin-restore-defaults")?.addEventListener("click", () => {
   if (confirm("¿Restaurar las preguntas oficiales de fábrica?")) {
@@ -1945,4 +2015,5 @@ window.addEventListener("DOMContentLoaded", () => {
   renderSoloCategories();
   setupTvControls();
   checkUrlRoomParam();
+  syncCategoriesWithFirestore();
 });
