@@ -135,6 +135,8 @@ let currentSession = {
   unsubscribeSecretos: null,
   activeDynamic: null,
   selectedCategory: categories[0]?.id || "dilemas_absurdos",
+  soloSubcategory: "all",
+  tableModeActive: true,
   soloQuestionIndex: 0,
   soloTurnPlayer: 1,
   soloDeck: null,
@@ -240,57 +242,106 @@ const MODE_COMPATIBLE_CATEGORIES = {
   ],
 };
 
+// Clasificación inteligente de preguntas: Elección (A vs B / ¿Qué preferirías?) vs Preguntas Abiertas
+function classifyQuestion(qText) {
+  if (!qText) return "open";
+  const lower = qText.toLowerCase().trim();
+  if (
+    lower.startsWith("¿preferirías") ||
+    lower.startsWith("preferirías") ||
+    lower.startsWith("¿prefieres") ||
+    lower.startsWith("prefieres") ||
+    lower.includes("qué preferirías") ||
+    lower.includes("qué prefieres") ||
+    (lower.includes("¿") && lower.includes(" o ") && (lower.includes("elegirías") || lower.includes("eliges") || lower.includes("escoges") || lower.includes("sacrificas") || lower.includes("te quedarías")))
+  ) {
+    return "choice"; // 🅰️/🅱️ Dilema de Elección
+  }
+  return "open"; // 💬 Pregunta Abierta & Debate
+}
+
 function renderSoloCategories() {
   const soloGrid = document.getElementById("solo-categories-grid");
-  const homeGrid = document.getElementById("home-categories-grid");
-
   const soloCats = categories.filter((c) => MODE_COMPATIBLE_CATEGORIES.solo.includes(c.id));
 
-  const generateCardHtml = (cat) => `
-    <div class="category-card" data-catid="${cat.id}">
-      <div class="category-top">
-        <span class="cat-emoji">${cat.icono || "🧊"}</span>
-        <span class="cat-badge" style="color:${cat.color || "var(--cyan)"}">${cat.badge || "Pack"}</span>
+  const generateCardHtml = (cat) => {
+    const totalCount = cat.preguntas.length;
+    const choiceCount = cat.preguntas.filter((q) => classifyQuestion(q) === "choice").length;
+    const openCount = totalCount - choiceCount;
+
+    return `
+      <div class="category-card" data-catid="${cat.id}">
+        <div class="category-top">
+          <span class="cat-emoji">${cat.icono || "🧊"}</span>
+          <span class="cat-badge" style="color:${cat.color || "var(--cyan)"}">${cat.badge || "Pack"}</span>
+        </div>
+        <h4>${escapeHtml(cat.titulo)}</h4>
+        <p>${escapeHtml(cat.descripcion)}</p>
+        <div style="font-size:11.5px; color:var(--text-muted); margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
+          <span style="background:rgba(168,85,247,0.12); color:#c084fc; padding:2px 6px; border-radius:10px;">🅰️/🅱️ ${choiceCount} elección</span>
+          <span style="background:rgba(56,189,248,0.12); color:var(--cyan); padding:2px 6px; border-radius:10px;">💬 ${openCount} abiertas</span>
+        </div>
+        <div class="cat-meta">
+          <span>${totalCount} preguntas al azar</span>
+          <strong style="color:var(--cyan)">Jugar ➔</strong>
+        </div>
       </div>
-      <h4>${escapeHtml(cat.titulo)}</h4>
-      <p>${escapeHtml(cat.descripcion)}</p>
-      <div class="cat-meta">
-        <span>${cat.preguntas.length} preguntas al azar</span>
-        <strong style="color:var(--cyan)">Jugar ➔</strong>
-      </div>
-    </div>
-  `;
+    `;
+  };
 
   if (soloGrid) {
     soloGrid.innerHTML = soloCats.map(generateCardHtml).join("");
     soloGrid.querySelectorAll(".category-card").forEach((card) => {
       card.addEventListener("click", () => {
         const catId = card.getAttribute("data-catid");
-        startSoloMode(catId);
+        startSoloMode(catId, currentSession.soloSubcategory || "all");
       });
     });
   }
 
-  if (homeGrid) {
-    homeGrid.innerHTML = soloCats.map(generateCardHtml).join("");
-    homeGrid.querySelectorAll(".category-card").forEach((card) => {
-      card.addEventListener("click", () => {
-        const catId = card.getAttribute("data-catid");
-        startSoloMode(catId);
-      });
-    });
-  }
+  // Setup de botones de subcategoría en el selector de 1 Celular
+  document.querySelectorAll(".subcat-pill").forEach((pill) => {
+    pill.onclick = () => {
+      document.querySelectorAll(".subcat-pill").forEach((p) => p.classList.remove("active"));
+      pill.classList.add("active");
+      const sub = pill.getAttribute("data-subcat") || "all";
+      currentSession.soloSubcategory = sub;
+      showToast(
+        sub === "choice"
+          ? "Filtrando: Solo Dilemas de Elección (¿Qué Preferirías?)"
+          : sub === "open"
+          ? "Filtrando: Solo Preguntas Abiertas & Debate"
+          : "Mostrando Todas las Preguntas",
+        sub === "choice" ? "🅰️/🅱️" : sub === "open" ? "💬" : "🎯"
+      );
+    };
+  });
 }
 
 function renderHomeCategories() {
   renderSoloCategories();
 }
 
-function startSoloMode(categoryId) {
+function loadAndFilterSoloDeck() {
+  const cat = categories.find((c) => c.id === currentSession.selectedCategory) || categories[0];
+  let filtered = [...cat.preguntas];
+  const sub = currentSession.soloSubcategory || "all";
+
+  if (sub === "choice") {
+    const choiceList = filtered.filter((q) => classifyQuestion(q) === "choice");
+    filtered = choiceList.length > 0 ? choiceList : filtered;
+  } else if (sub === "open") {
+    const openList = filtered.filter((q) => classifyQuestion(q) === "open");
+    filtered = openList.length > 0 ? openList : filtered;
+  }
+
+  currentSession.soloDeck = shuffleArray(filtered);
+}
+
+function startSoloMode(categoryId, subcategory = "all") {
   currentSession.selectedCategory = categoryId;
-  const cat = categories.find((c) => c.id === categoryId) || categories[0];
-  // Mezclar preguntas al azar para esta partida
-  currentSession.soloDeck = shuffleArray([...cat.preguntas]);
+  currentSession.soloSubcategory = subcategory;
+  loadAndFilterSoloDeck();
   currentSession.soloQuestionIndex = 0;
   currentSession.soloTurnPlayer = 1;
   updateSoloCard();
@@ -300,39 +351,168 @@ function startSoloMode(categoryId) {
 function updateSoloCard() {
   const cat = categories.find((c) => c.id === currentSession.selectedCategory) || categories[0];
   if (!currentSession.soloDeck || currentSession.soloDeck.length === 0) {
-    currentSession.soloDeck = shuffleArray([...cat.preguntas]);
+    loadAndFilterSoloDeck();
   }
   const qList = currentSession.soloDeck;
   if (!qList || qList.length === 0) {
-    document.getElementById("solo-question-text").textContent = "No hay preguntas en esta categoría.";
+    document.getElementById("solo-question-text").textContent = "No hay preguntas disponibles con este filtro.";
     return;
   }
 
-  // Si se recorrieron todas, rebarajar automáticamente para seguir jugando al azar sin repeticiones inmediatas
+  // Rebarajar si se recorrieron todas
   if (currentSession.soloQuestionIndex >= qList.length) {
-    currentSession.soloDeck = shuffleArray([...cat.preguntas]);
+    loadAndFilterSoloDeck();
     currentSession.soloQuestionIndex = 0;
-    showToast("¡Mazo de 100 preguntas rebarajado al azar! 🔀", "🎲");
+    showToast("¡Mazo rebarajado al azar! 🔀", "🎲");
   }
 
   const idx = Math.max(0, Math.min(currentSession.soloQuestionIndex, currentSession.soloDeck.length - 1));
   currentSession.soloQuestionIndex = idx;
+  const currentQ = currentSession.soloDeck[idx];
 
+  // Clasificación de la pregunta actual (Elección vs Abierta)
+  const qType = classifyQuestion(currentQ);
+  const subcatBadge = document.getElementById("solo-subcat-badge");
+  if (subcatBadge) {
+    if (qType === "choice") {
+      subcatBadge.textContent = "🅰️/🅱️ Elección (¿Qué Preferirías?)";
+      subcatBadge.style.color = "#c084fc";
+      subcatBadge.style.background = "rgba(168, 85, 247, 0.15)";
+      subcatBadge.style.borderColor = "rgba(168, 85, 247, 0.4)";
+    } else {
+      subcatBadge.textContent = "💬 Pregunta Abierta";
+      subcatBadge.style.color = "var(--cyan)";
+      subcatBadge.style.background = "rgba(56, 189, 248, 0.15)";
+      subcatBadge.style.borderColor = "rgba(56, 189, 248, 0.4)";
+    }
+  }
+
+  // Animación de pulso
   const card = document.getElementById("solo-question-card");
   card.classList.remove("shake");
-  void card.offsetWidth; // reflow
+  void card.offsetWidth;
   card.classList.add("shake");
 
+  // Modo Mesa: Rotación 180° según el turno del jugador
+  const stage = document.getElementById("solo-card-stage");
+  if (stage) {
+    if (currentSession.tableModeActive && currentSession.soloTurnPlayer === 2) {
+      stage.classList.add("rotate-180");
+    } else {
+      stage.classList.remove("rotate-180");
+    }
+  }
+
+  // Banner y Badges de Turno
+  const turnBanner = document.getElementById("solo-turn-banner");
+  const turnTitle = document.getElementById("lbl-turn-player-title");
+  const turnInstruction = document.getElementById("lbl-turn-instruction");
+  const turnAvatar = document.getElementById("lbl-turn-avatar");
+  const turnBadge = document.getElementById("solo-turn-badge");
+
+  const isP1 = currentSession.soloTurnPlayer === 1;
+  if (turnBanner) {
+    turnBanner.className = `turn-banner ${isP1 ? "p1-active" : "p2-active"}`;
+  }
+  if (turnTitle) {
+    turnTitle.textContent = isP1 ? "TURNO DE: JUGADOR 1" : "TURNO DE: JUGADOR 2";
+    turnTitle.style.color = isP1 ? "var(--cyan)" : "#f43f5e";
+  }
+  if (turnAvatar) {
+    turnAvatar.textContent = isP1 ? "👤" : "👥";
+  }
+  if (turnInstruction) {
+    turnInstruction.textContent = isP1
+      ? "Léele esta pregunta en voz alta a tu acompañante 🗣️"
+      : "¡Ahora te toca a ti hacerle la pregunta a tu compañero/a! 🗣️";
+  }
+  if (turnBadge) {
+    turnBadge.textContent = isP1 ? "👤 Turno: Jugador 1" : "👥 Turno: Jugador 2";
+    turnBadge.style.borderColor = isP1 ? "var(--cyan)" : "var(--coral)";
+    turnBadge.style.color = isP1 ? "var(--cyan)" : "var(--coral)";
+  }
+
+  // Contadores de subcategoría en el switch rápido
+  const totalCatCount = cat.preguntas.length;
+  const choiceCatCount = cat.preguntas.filter((q) => classifyQuestion(q) === "choice").length;
+  const openCatCount = totalCatCount - choiceCatCount;
+
+  const countAll = document.getElementById("count-subcat-all");
+  const countChoice = document.getElementById("count-subcat-choice");
+  const countOpen = document.getElementById("count-subcat-open");
+  if (countAll) countAll.textContent = totalCatCount;
+  if (countChoice) countChoice.textContent = choiceCatCount;
+  if (countOpen) countOpen.textContent = openCatCount;
+
+  // Actualizar botones de filtro activos dentro de la partida
+  document.querySelectorAll(".btn-subcat-filter").forEach((btn) => {
+    const f = btn.getAttribute("data-filter");
+    if (f === (currentSession.soloSubcategory || "all")) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  // Textos y contadores de la tarjeta
   document.getElementById("solo-cat-badge").textContent = cat.titulo;
   document.getElementById("solo-cat-badge").style.color = cat.color || "var(--cyan)";
   document.getElementById("solo-counter").textContent = `🎲 ${idx + 1} / ${qList.length}`;
-  document.getElementById("solo-question-text").textContent = currentSession.soloDeck[idx];
+  document.getElementById("solo-question-text").textContent = currentQ;
 
-  const turnBadge = document.getElementById("solo-turn-badge");
-  turnBadge.textContent = currentSession.soloTurnPlayer === 1 ? "👤 Turno: Jugador 1" : "👥 Turno: Jugador 2";
-  turnBadge.style.borderColor = currentSession.soloTurnPlayer === 1 ? "var(--cyan)" : "var(--coral)";
-  turnBadge.style.color = currentSession.soloTurnPlayer === 1 ? "var(--cyan)" : "var(--coral)";
+  // Actualizar texto del botón de Modo Mesa
+  const tableModeText = document.getElementById("lbl-table-mode-text");
+  if (tableModeText) {
+    tableModeText.textContent = currentSession.tableModeActive ? "Modo Mesa: Gira 180°" : "Modo Mesa: Fijo";
+  }
 }
+
+// Botón Toggle Modo Mesa (Giro automático 180° en mesa)
+document.getElementById("btn-toggle-table-mode")?.addEventListener("click", () => {
+  currentSession.tableModeActive = !currentSession.tableModeActive;
+  const stage = document.getElementById("solo-card-stage");
+  if (!currentSession.tableModeActive && stage) {
+    stage.classList.remove("rotate-180");
+  } else if (stage && currentSession.soloTurnPlayer === 2) {
+    stage.classList.add("rotate-180");
+  }
+  updateSoloCard();
+  showToast(
+    currentSession.tableModeActive
+      ? "Modo Mesa Activado: La pantalla girará 180° automáticamente al cambiar de turno 🔄"
+      : "Modo Mesa Desactivado: Orientación fija 📱",
+    "🔄"
+  );
+});
+
+// Botón Giro Manual 180°
+document.getElementById("btn-turn-flip-manual")?.addEventListener("click", () => {
+  const stage = document.getElementById("solo-card-stage");
+  if (stage) {
+    stage.classList.toggle("rotate-180");
+    const isRotated = stage.classList.contains("rotate-180");
+    showToast(isRotated ? "Giro 180° aplicado (vista opuesta)" : "Orientación normal", "🔄");
+  }
+});
+
+// Filtros rápidos de subcategoría dentro del juego
+document.querySelectorAll(".btn-subcat-filter").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const f = btn.getAttribute("data-filter") || "all";
+    currentSession.soloSubcategory = f;
+    loadAndFilterSoloDeck();
+    currentSession.soloQuestionIndex = 0;
+    updateSoloCard();
+    showToast(
+      f === "choice"
+        ? "Filtrando: Solo Dilemas de Elección (¿Qué Preferirías?)"
+        : f === "open"
+        ? "Filtrando: Solo Preguntas Abiertas & Debate"
+        : "Mostrando todas las preguntas de la categoría",
+      f === "choice" ? "🅰️/🅱️" : f === "open" ? "💬" : "🎯"
+    );
+  });
+});
 
 // Botones modo Solo y navegación entre vistas de categorías
 document.getElementById("solo-question-card")?.addEventListener("click", () => {
@@ -355,8 +535,7 @@ document.getElementById("btn-solo-prev")?.addEventListener("click", () => {
 });
 
 document.getElementById("btn-solo-shuffle")?.addEventListener("click", () => {
-  const cat = categories.find((c) => c.id === currentSession.selectedCategory) || categories[0];
-  currentSession.soloDeck = shuffleArray([...cat.preguntas]);
+  loadAndFilterSoloDeck();
   currentSession.soloQuestionIndex = 0;
   updateSoloCard();
   showToast("¡Preguntas rebarajadas al azar! 🎲", "🔀");

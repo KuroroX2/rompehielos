@@ -77,15 +77,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Quick Category Launcher for Solo Mode -->
-      <div class="categories-section">
-        <h2 class="section-title"><span>🎯</span> Preguntas de a 2 Personas (1 Celular en la Mesa)</h2>
-        <p class="section-desc">Selecciona directamente la temática para jugar cara a cara en citas o parejas (100 preguntas al azar por baraja):</p>
-        <div class="categories-grid" id="home-categories-grid">
-          <!-- Dynamically populated with ONLY solo-compatible categories (2 personas) -->
-        </div>
-      </div>
     </section>
 
     <!-- ==========================================
@@ -97,14 +88,27 @@
         <div class="turn-pill">📱 Preguntas de a 2 Personas</div>
       </div>
 
-      <div style="text-align: center; max-width: 680px; margin: 0 auto 24px;">
+      <div style="text-align: center; max-width: 680px; margin: 0 auto 20px;">
         <span class="hero-pill" style="margin-bottom: 8px;">🎯 Exclusivo para 2 Personas</span>
         <h2 style="font-family: var(--font-display); font-size: clamp(24px, 4vw, 32px); font-weight: 900; margin-bottom: 8px;">
           Conversaciones para <span class="text-gradient">2 Personas</span>
         </h2>
-        <p style="color: var(--text-muted); font-size: 14.5px;">
-          Pásense el teléfono por turnos o colóquenlo al centro. Selecciona una baraja exclusiva para 2 personas: cada mazo trae <strong>100 preguntas barajadas 100% al azar</strong>.
+        <p style="color: var(--text-muted); font-size: 14.5px; margin-bottom: 16px;">
+          Coloquen el celular al centro de la mesa o pásenselo por turnos. Elige una temática y un tipo de dinámica:
         </p>
+
+        <!-- Subcategorías: Elección "¿Qué Preferirías?" vs Preguntas Abiertas -->
+        <div class="subcategory-tabs" style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+          <button type="button" class="subcat-pill active" id="subcat-tab-all" data-subcat="all">
+            🎯 Todas las Preguntas
+          </button>
+          <button type="button" class="subcat-pill" id="subcat-tab-choice" data-subcat="choice">
+            🅰️/🅱️ ¿Qué Preferirías? (Elección)
+          </button>
+          <button type="button" class="subcat-pill" id="subcat-tab-open" data-subcat="open">
+            💬 Preguntas Abiertas & Debate
+          </button>
+        </div>
       </div>
 
       <div class="categories-grid" id="solo-categories-grid">
@@ -117,20 +121,59 @@
          ========================================== -->
     <section id="view-solo" class="view-screen">
       <div class="game-header">
-        <button type="button" class="back-btn" id="btn-back-solo">← Volver</button>
-        <button type="button" class="btn btn-secondary" id="btn-solo-change-cat" style="font-size: 12.5px; padding: 6px 12px; border-color: rgba(56,189,248,0.4); color: var(--cyan);">
-          🎯 Cambiar Categoría
+        <button type="button" class="back-btn" id="btn-back-solo">← Categorías</button>
+        
+        <!-- Toggle Modo Mesa 180° -->
+        <button type="button" class="btn btn-secondary" id="btn-toggle-table-mode" style="font-size: 12px; padding: 6px 12px; display: flex; align-items: center; gap: 6px;" title="Gira la tarjeta 180° automáticamente al cambiar de turno">
+          <span id="lbl-table-mode-icon">🔄</span>
+          <span id="lbl-table-mode-text">Modo Mesa: Gira 180°</span>
         </button>
-        <div class="turn-pill" id="solo-turn-badge" title="Toca para cambiar turno">
+
+        <div class="turn-pill" id="solo-turn-badge" title="Toca para cambiar turno manual" style="cursor: pointer;">
           👤 Turno: Jugador 1
         </div>
       </div>
 
-      <div class="card-stage">
+      <!-- Banner de Turno Animado y Claramente Visible -->
+      <div id="solo-turn-banner" class="turn-banner p1-active" style="max-width: 580px; margin: 0 auto 14px; padding: 12px 16px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between; border: 1.5px solid var(--cyan); background: rgba(56, 189, 248, 0.12);">
+        <div style="display: flex; align-items: center; gap: 10px; text-align: left;">
+          <span style="font-size: 26px;" id="lbl-turn-avatar">👤</span>
+          <div>
+            <strong id="lbl-turn-player-title" style="font-size: 14.5px; display: block; color: var(--cyan); letter-spacing: 0.02em;">
+              TURNO DE: JUGADOR 1
+            </strong>
+            <span id="lbl-turn-instruction" style="font-size: 12px; color: var(--text-muted);">
+              Léele esta pregunta en voz alta a tu acompañante 🗣️
+            </span>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary" id="btn-turn-flip-manual" style="font-size: 11px; padding: 5px 9px;" title="Girar 180° de inmediato">
+          🔄 Girar 180°
+        </button>
+      </div>
+
+      <!-- Filtro Rápido de Subcategoría dentro del Juego -->
+      <div style="display: flex; justify-content: center; gap: 6px; max-width: 580px; margin: 0 auto 14px; flex-wrap: wrap;">
+        <button type="button" class="btn-subcat-filter active" id="btn-filter-all" data-filter="all" style="font-size: 11.5px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-main); cursor: pointer;">
+          🎯 Todas (<span id="count-subcat-all">0</span>)
+        </button>
+        <button type="button" class="btn-subcat-filter" id="btn-filter-choice" data-filter="choice" style="font-size: 11.5px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-muted); cursor: pointer;">
+          🅰️/🅱️ ¿Qué preferirías? (<span id="count-subcat-choice">0</span>)
+        </button>
+        <button type="button" class="btn-subcat-filter" id="btn-filter-open" data-filter="open" style="font-size: 11.5px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border-subtle); background: var(--bg-surface-elevated); color: var(--text-muted); cursor: pointer;">
+          💬 Abiertas (<span id="count-subcat-open">0</span>)
+        </button>
+      </div>
+
+      <!-- Tarjeta 3D con Soporte de Rotación 180° de Modo Mesa -->
+      <div class="card-stage" id="solo-card-stage">
         <div class="question-card-3d" id="solo-question-card">
           <div class="card-category-indicator">
             <span id="solo-cat-badge">Dilemas Absurdos</span>
-            <span class="badge-random" style="font-size: 11px; font-weight: 700; background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 8px; border-radius: 12px;">🎲 Al azar</span>
+            <!-- Badge de Tipo: Elección vs Abierta -->
+            <span id="solo-subcat-badge" style="font-size: 11px; font-weight: 700; background: rgba(56, 189, 248, 0.15); color: var(--cyan); border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 12px;">
+              💬 Abierta
+            </span>
             <span id="solo-counter">1 / 100</span>
           </div>
 
@@ -139,23 +182,23 @@
           </p>
 
           <div class="card-instructions">
-            <span>🧊 Toca la tarjeta o presiona Siguiente para romper el hielo</span>
+            <span id="solo-bottom-instruction">🧊 Toca la tarjeta o presiona Siguiente para responder y rotar turno</span>
           </div>
         </div>
       </div>
 
-      <div class="card-actions-bar">
+      <div class="card-actions-bar" id="solo-actions-bar">
         <button type="button" class="btn btn-secondary" id="btn-solo-prev" title="Pregunta anterior">
           <span>◀</span> Anterior
         </button>
         <button type="button" class="btn btn-primary" id="btn-solo-next">
           <span>Siguiente Pregunta</span> <span>▶</span>
         </button>
-        <button type="button" class="btn btn-secondary" id="btn-solo-shuffle" title="Rebarajar preguntas al azar">
-          <span>🔀</span> Al Azar
-        </button>
         <button type="button" class="btn btn-secondary" id="btn-solo-toggle-turn" title="Cambiar turno de jugador">
           <span>🔄</span> Turno
+        </button>
+        <button type="button" class="btn btn-secondary" id="btn-solo-shuffle" title="Rebarajar preguntas al azar">
+          <span>🔀</span> Al Azar
         </button>
       </div>
     </section>
