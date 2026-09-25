@@ -46,21 +46,21 @@
           <!-- Card Solo Mode -->
           <div class="mode-card card-solo" id="card-start-solo">
             <span class="card-header-icon">📱</span>
-            <h3>1 Celular en la Mesa <span>➔</span></h3>
-            <p>Para citas, amigos o trabajo en persona. Toca aquí para elegir tu categoría (100 preguntas por baraja al azar).</p>
+            <h3>1 Celular en la Mesa (2 Personas) <span>➔</span></h3>
+            <p>Exclusivo para citas, parejas o 2 personas en una cafetería o bar. Preguntas cara a cara por turnos (sin salas ni votaciones).</p>
             <div class="mode-footer">
-              <span>Elige Categoría</span>
-              <span style="font-weight: 800; color: var(--cyan);">Seleccionar ➔</span>
+              <span>Para 2 Personas</span>
+              <span style="font-weight: 800; color: var(--cyan);">Elegir Temática ➔</span>
             </div>
           </div>
 
           <!-- Card Multi-Device Rooms -->
           <div class="mode-card card-multi" id="card-start-multi">
             <span class="card-header-icon">👥</span>
-            <h3>Salas Multicelular <span>➔</span></h3>
-            <p>Cada uno entra desde su celular con un código. Votaciones secretas Sí/No, confesiones y dinámicas sincronizadas.</p>
+            <h3>Salas Multicelular (Grupos & Votación) <span>➔</span></h3>
+            <p>Para grupos y carretes. Cada uno vota en su teléfono: "¿Quién es más probable?", "Yo he besado...", confesiones y estadísticas en vivo.</p>
             <div class="mode-footer">
-              <span>Dinámicas Grupales</span>
+              <span>Votaciones & Anonimato</span>
               <span style="font-weight: 800; color: var(--purple);">Crear / Unirse ➔</span>
             </div>
           </div>
@@ -69,7 +69,7 @@
           <div class="mode-card card-tv" id="card-start-tv">
             <span class="card-header-icon">📺</span>
             <h3>Modo TV & Proyector <span>➔</span></h3>
-            <p>Pantalla gigante para eventos o fiestas. Elige entre proyectar una sala en vivo con QR o una baraja gigante de preguntas.</p>
+            <p>Pantalla gigante para eventos o fiestas. Proyecta la sala con código QR para que todos voten en vivo, o proyecta dilemas gigantes.</p>
             <div class="mode-footer">
               <span>Pantalla Gigante</span>
               <span style="font-weight: 800; color: var(--emerald);">Proyectar ➔</span>
@@ -80,10 +80,10 @@
 
       <!-- Quick Category Launcher for Solo Mode -->
       <div class="categories-section">
-        <h2 class="section-title"><span>🎯</span> Barajas para 1 Celular (Acceso Rápido)</h2>
-        <p class="section-desc">Selecciona directamente una categoría compatible para jugar en persona (100 preguntas al azar por temática):</p>
+        <h2 class="section-title"><span>🎯</span> Preguntas de a 2 Personas (1 Celular en la Mesa)</h2>
+        <p class="section-desc">Selecciona directamente la temática para jugar cara a cara en citas o parejas (100 preguntas al azar por baraja):</p>
         <div class="categories-grid" id="home-categories-grid">
-          <!-- Dynamically populated with ONLY solo-compatible categories -->
+          <!-- Dynamically populated with ONLY solo-compatible categories (2 personas) -->
         </div>
       </div>
     </section>
@@ -94,21 +94,21 @@
     <section id="view-solo-categories" class="view-screen">
       <div class="game-header">
         <button type="button" class="back-btn" id="btn-back-solo-categories">← Volver a Modos</button>
-        <div class="turn-pill">📱 1 Celular en la Mesa</div>
+        <div class="turn-pill">📱 Preguntas de a 2 Personas</div>
       </div>
 
       <div style="text-align: center; max-width: 680px; margin: 0 auto 24px;">
-        <span class="hero-pill" style="margin-bottom: 8px;">🎯 Paso 1: Elige tu Categoría</span>
+        <span class="hero-pill" style="margin-bottom: 8px;">🎯 Exclusivo para 2 Personas</span>
         <h2 style="font-family: var(--font-display); font-size: clamp(24px, 4vw, 32px); font-weight: 900; margin-bottom: 8px;">
-          ¿Qué tipo de encuentro <span class="text-gradient">tienes hoy?</span>
+          Conversaciones para <span class="text-gradient">2 Personas</span>
         </h2>
         <p style="color: var(--text-muted); font-size: 14.5px;">
-          Pasa el celular por turnos o déjalo en el centro. Selecciona una temática compatible: cada baraja trae <strong>100 preguntas barajadas 100% al azar</strong>.
+          Pásense el teléfono por turnos o colóquenlo al centro. Selecciona una baraja exclusiva para 2 personas: cada mazo trae <strong>100 preguntas barajadas 100% al azar</strong>.
         </p>
       </div>
 
       <div class="categories-grid" id="solo-categories-grid">
-        <!-- Rendered dynamically with the 7 compatible categories -->
+        <!-- Rendered dynamically with ONLY the 4 2-player categories -->
       </div>
     </section>
 
@@ -739,13 +739,24 @@
 
         <!-- Voting Buttons -->
         <div id="secretos-voting-controls" style="margin-bottom: 20px;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <!-- Yes/No Voting Controls for Secretos & Declaraciones Íntimas -->
+          <div id="secretos-yes-no-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
             <button type="button" class="btn btn-primary" id="btn-secreto-vote-yes" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); font-size: 17px; padding: 18px 12px; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);">
               ✅ SÍ, lo he hecho
             </button>
             <button type="button" class="btn btn-danger" id="btn-secreto-vote-no" style="font-size: 17px; padding: 18px 12px;">
               ❌ NO, jamás
             </button>
+          </div>
+
+          <!-- Suspect Voting Controls for "¿Quién es más probable que...?" -->
+          <div id="secretos-suspects-controls" style="display: none;">
+            <p style="font-size: 13.5px; font-weight: 700; text-align: center; color: var(--text-muted); margin-bottom: 12px;">
+              Vota en secreto por el más probable / culpable del grupo:
+            </p>
+            <div class="voting-options-grid" id="secretos-suspects-grid">
+              <!-- Dynamically populated with connected players -->
+            </div>
           </div>
         </div>
 
@@ -754,14 +765,21 @@
           ✓ ¡Tu voto ha sido registrado! Esperando al resto del grupo...
         </div>
 
-        <!-- Anonymous Results Breakdown by Gender -->
+        <!-- Anonymous Results Breakdown -->
         <div id="secretos-results-box" style="margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border-subtle); display: none;">
           <h4 style="font-size: 16px; font-weight: 800; text-align: center; margin-bottom: 14px;">
             📊 Resultados Anónimos del Grupo:
           </h4>
 
-          <!-- Global Big Summary -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;">
+          <!-- Suspect Results for "¿Quién es más probable que...?" -->
+          <div id="secretos-suspects-results-container" style="display: none; margin-bottom: 20px;">
+            <div class="results-bars-list" id="secretos-suspects-bars-list">
+              <!-- Dynamically populated with suspect bars -->
+            </div>
+          </div>
+
+          <!-- Global Big Summary for Yes/No Declarations -->
+          <div id="secretos-yes-no-results-summary" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;">
             <div style="background: rgba(16, 185, 129, 0.15); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: var(--radius-md); padding: 14px; text-align: center;">
               <div style="font-size: 32px; font-weight: 900; color: var(--emerald);" id="lbl-secretos-total-yes">0</div>
               <span style="font-size: 13px; font-weight: 700; color: #a7f3d0;">Dijeron SÍ</span>

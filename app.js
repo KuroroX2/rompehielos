@@ -166,17 +166,15 @@ function switchView(viewId) {
 
 // Compatibilidad estricta de categorías por modo de juego
 const MODE_COMPATIBLE_CATEGORIES = {
-  // Modo 1 Celular: Citas, dilemas, amigos, trabajo y quién es más probable (Excluye secretos íntimos que son para sala con votación cruzada)
+  // Modo 1 Celular en la Mesa: Exclusivo para 2 personas (Citas románticas y preguntas cara a cara de a dos)
+  // Las dinámicas grupales con votaciones ("¿Quién es más probable?", "Secretos Íntimos / Yo he...") son exclusivas de Salas Multicelular.
   solo: [
     "citas_nivel1",
     "citas_nivel2",
     "citas_nivel3",
     "dilemas_absurdos",
-    "amigos_fiesta",
-    "empresas_trabajo",
-    "quien_es_mas_probable",
   ],
-  // Modo Salas Multicelular: Preguntas grupales votadas en sala y dinámicas interactivas
+  // Modo Salas Multicelular: Dinámicas grupales con celulares, votaciones de sospechosos, anonimato y estadísticas en vivo
   multiplayer: [
     "secretos_intimos",
     "quien_es_mas_probable",
@@ -184,10 +182,11 @@ const MODE_COMPATIBLE_CATEGORIES = {
     "amigos_fiesta",
     "empresas_trabajo",
   ],
-  // Modo TV / Proyector: Preguntas gigantes para eventos y reuniones
+  // Modo TV / Proyector: Pantalla gigante para eventos o carretes
   tv: [
-    "dilemas_absurdos",
     "quien_es_mas_probable",
+    "secretos_intimos",
+    "dilemas_absurdos",
     "amigos_fiesta",
     "empresas_trabajo",
   ],
@@ -583,6 +582,8 @@ document.getElementById("btn-share-copy-link")?.addEventListener("click", () => 
   }
 });
 
+let currentRoomPlayers = [];
+
 // Escuchar cambios de la sala en tiempo real
 function listenToRoom(roomCode) {
   if (!firestoreAvailable || !db) {
@@ -604,10 +605,20 @@ function listenToRoom(roomCode) {
     let hombres = 0;
     let mujeres = 0;
     let otros = 0;
+    currentRoomPlayers = [];
 
     snap.forEach((pDoc) => {
       count++;
       const p = pDoc.data();
+      const pId = p.id || pDoc.id;
+      currentRoomPlayers.push({
+        id: pId,
+        name: p.name || "Jugador",
+        avatar: p.avatar || "👤",
+        gender: p.gender || "hombre",
+        isHost: !!p.isHost,
+      });
+
       const g = (p.gender || "hombre").toLowerCase();
       if (g === "hombre") hombres++;
       else if (g === "mujer") mujeres++;
@@ -679,6 +690,15 @@ function renderLocalPlayerChip() {
     </div>
   `;
   document.getElementById("lbl-player-count").textContent = "1";
+  currentRoomPlayers = [
+    {
+      id: currentSession.playerId,
+      name: currentSession.playerName || "Tú",
+      avatar: currentSession.playerAvatar || "👤",
+      gender: currentSession.playerGender || "hombre",
+      isHost: true,
+    }
+  ];
   currentRoomGenderCounts = {
     hombres: currentSession.playerGender === "hombre" ? 1 : 0,
     mujeres: currentSession.playerGender === "mujer" ? 1 : 0,
@@ -831,20 +851,83 @@ function setupSecretosPhase(state, roomData = {}) {
   }
 
   // Reset UI
+  const isSuspectMode = targetCatId === "quien_es_mas_probable";
+  const yesNoControls = document.getElementById("secretos-yes-no-controls");
+  const suspectsControls = document.getElementById("secretos-suspects-controls");
+
   document.getElementById("secretos-voting-controls").style.display = "block";
   document.getElementById("secretos-voted-status").style.display = "none";
   document.getElementById("secretos-results-box").style.display = "none";
 
+  if (isSuspectMode) {
+    if (yesNoControls) yesNoControls.style.display = "none";
+    if (suspectsControls) suspectsControls.style.display = "block";
+    renderSuspectsVotingButtons();
+  } else {
+    if (yesNoControls) yesNoControls.style.display = "grid";
+    if (suspectsControls) suspectsControls.style.display = "none";
+  }
+
   // TV mode sync if TV is open
   const tvHeadline = document.getElementById("tv-main-headline");
   if (tvHeadline) {
+    const headlinePrefix = isSuspectMode ? "👑 ¿Quién es Más Probable Que...?" : "🔥 Declaración Íntima:";
     tvHeadline.innerHTML = `
-      <div style="font-size:22px; color:var(--coral); text-transform:uppercase; margin-bottom:12px; font-weight:800;">🔥 Declaración Íntima:</div>
+      <div style="font-size:22px; color:var(--coral); text-transform:uppercase; margin-bottom:12px; font-weight:800;">${headlinePrefix}</div>
       "${escapeHtml(currentStatement)}"
     `;
   }
 
   listenToSecretosVotes(secretosRoundIndex);
+}
+
+function renderSuspectsVotingButtons() {
+  const grid = document.getElementById("secretos-suspects-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  const players = currentRoomPlayers.length > 0 ? currentRoomPlayers : [
+    { id: currentSession.playerId, name: currentSession.playerName || "Tú", avatar: currentSession.playerAvatar || "👤" },
+    { id: "p_demo1", name: "Valentina", avatar: "🐱" },
+    { id: "p_demo2", name: "Nicolás", avatar: "🐺" }
+  ];
+
+  players.forEach((p) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "voting-option-btn";
+    btn.innerHTML = `<span style="font-size:24px;">${p.avatar || "👤"}</span> <strong>${escapeHtml(p.name)}</strong>`;
+    btn.addEventListener("click", () => {
+      recordSecretosSuspectVote(p.id, p.name);
+    });
+    grid.appendChild(btn);
+  });
+}
+
+function recordSecretosSuspectVote(suspectId, suspectName) {
+  document.getElementById("secretos-voting-controls").style.display = "none";
+  document.getElementById("secretos-voted-status").style.display = "block";
+
+  const voteData = {
+    playerId: currentSession.playerId,
+    name: currentSession.playerName,
+    gender: currentSession.playerGender || "hombre",
+    suspectId: suspectId,
+    suspectName: suspectName,
+    createdAt: Date.now(),
+  };
+
+  secretosCurrentVotes[currentSession.playerId] = voteData;
+
+  if (firestoreAvailable && db && currentSession.currentRoomId) {
+    setDoc(
+      doc(db, "salas", currentSession.currentRoomId, `secretos_v_${secretosRoundIndex}`, currentSession.playerId),
+      voteData
+    ).catch(console.error);
+  }
+
+  showToast(`Votaste por: ${suspectName}`, "👉");
+  renderSecretosTally();
 }
 
 function listenToSecretosVotes(roundIdx) {
@@ -892,6 +975,65 @@ function renderSecretosTally() {
   if (votes.length === 0) return;
 
   document.getElementById("secretos-results-box").style.display = "block";
+
+  const isSuspectMode = currentSession.selectedRoomCategory === "quien_es_mas_probable";
+  const suspectsResultsContainer = document.getElementById("secretos-suspects-results-container");
+  const yesNoResultsSummary = document.getElementById("secretos-yes-no-results-summary");
+  const genderBreakdownList = document.getElementById("secretos-gender-breakdown-list");
+
+  if (isSuspectMode) {
+    if (suspectsResultsContainer) suspectsResultsContainer.style.display = "block";
+    if (yesNoResultsSummary) yesNoResultsSummary.style.display = "none";
+    if (genderBreakdownList) genderBreakdownList.style.display = "none";
+
+    const tally = {};
+    votes.forEach((v) => {
+      if (v.suspectId) {
+        if (!tally[v.suspectId]) {
+          tally[v.suspectId] = {
+            name: v.suspectName || "Participante",
+            count: 0,
+          };
+        }
+        tally[v.suspectId].count++;
+      }
+    });
+
+    const sortedSuspects = Object.values(tally).sort((a, b) => b.count - a.count);
+    const barsList = document.getElementById("secretos-suspects-bars-list");
+    if (barsList) {
+      barsList.innerHTML = sortedSuspects.map((item, idx) => {
+        const pct = Math.round((item.count / votes.length) * 100);
+        const isTop = idx === 0 && item.count > 0;
+        return `
+          <div class="result-bar-item" style="padding: 12px 14px; margin-bottom: 8px; border-left: 4px solid ${isTop ? 'var(--coral)' : 'var(--purple)'};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 800; font-size: 14.5px;">
+                ${isTop ? '👑 ' : ''}${escapeHtml(item.name)}
+              </span>
+              <span style="font-weight: 800; color: ${isTop ? 'var(--coral)' : 'var(--cyan)'};">
+                ${item.count} ${item.count === 1 ? 'voto' : 'votos'} (${pct}%)
+              </span>
+            </div>
+            <div style="background: rgba(255, 255, 255, 0.08); height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="background: ${isTop ? 'var(--coral)' : 'var(--purple)'}; height: 100%; width: ${pct}%; transition: width 0.8s ease;"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    if (sortedSuspects.length > 0) {
+      const winner = sortedSuspects[0];
+      document.getElementById("lbl-secretos-intrigue-text").textContent =
+        `👑 ¡${winner.name} fue elegido/a como el más probable con ${winner.count} ${winner.count === 1 ? 'voto' : 'votos'} (${Math.round((winner.count / votes.length) * 100)}%)! 👀`;
+    }
+    return;
+  }
+
+  // Si no es suspect mode, mostrar resultados Yes/No
+  if (suspectsResultsContainer) suspectsResultsContainer.style.display = "none";
+  if (yesNoResultsSummary) yesNoResultsSummary.style.display = "grid";
 
   let totalYes = 0;
   let totalNo = 0;
@@ -1003,7 +1145,8 @@ document.getElementById("btn-next-secreto")?.addEventListener("click", async () 
   }
 
   setupSecretosPhase(null, { secretosRoundIndex, secretosDeck: currentRoomSecretosDeck });
-  showToast("Siguiente declaración íntima al azar...", "🎲");
+  const isProbable = currentSession.selectedRoomCategory === "quien_es_mas_probable";
+  showToast(isProbable ? "Siguiente ronda: ¿Quién es más probable?..." : "Siguiente declaración íntima al azar...", "🎲");
 });
 
 document.getElementById("btn-leave-secretos")?.addEventListener("click", () => switchView("view-lobby"));
