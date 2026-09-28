@@ -1,7 +1,7 @@
 // app.js - Lógica principal de RompeHielos
 import { firebaseConfig } from "./firebase-config.js";
 import { DEFAULT_CATEGORIES } from "./questions-data.js";
-import { classifyGroupQuestion, isChoiceQuestion } from "./question-types.js";
+import { classifyGroupQuestion, isChoiceQuestion, questionText } from "./question-types.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getFirestore,
@@ -34,7 +34,11 @@ let categories = loadStoredCategories();
 function loadStoredCategories() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY_CATEGORIES) || "null");
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      // Las ediciones del admin se conservan, pero las categorías oficiales nuevas también aparecen
+      const ids = new Set(parsed.map((c) => c.id));
+      return [...parsed, ...structuredClone(DEFAULT_CATEGORIES.filter((c) => !ids.has(c.id)))];
+    }
   } catch {}
   return structuredClone(DEFAULT_CATEGORIES);
 }
@@ -299,6 +303,8 @@ const ROOM_DYNAMICS = [
   { key: "dilemas_absurdos", mode: "preguntas", category: "dilemas_absurdos", icon: "🤯", title: "Dilemas absurdos", desc: "Votan A o B, Sí o No, o a alguien le toca responder.", gender: true },
   { key: "amigos_fiesta", mode: "preguntas", category: "amigos_fiesta", icon: "🍻", title: "Amigos y carrete", desc: "Anécdotas, votaciones y confesiones para el grupo.", gender: true },
   { key: "empresas_trabajo", mode: "preguntas", category: "empresas_trabajo", icon: "💼", title: "Trabajo en equipo", desc: "Para conocer al equipo: rondas de respuesta y votaciones.", gender: true },
+  { key: "reunion_hombres", mode: "preguntas", category: "reunion_hombres", icon: "🍺", title: "Junta de hombres", desc: "Solo para hombres: qué miran primero, quién es el más mandado y más.", audience: "hombre" },
+  { key: "reunion_mujeres", mode: "preguntas", category: "reunion_mujeres", icon: "🥂", title: "Junta de mujeres", desc: "Solo para mujeres: qué miran primero, quién stalkea mejor y más.", audience: "mujer" },
   { key: "confesiones", mode: "confesiones", icon: "🕵️", title: "Confesiones anónimas", desc: "Cada uno escribe una confesión y el grupo adivina de quién es.", author: true },
   { key: "tres", mode: "tres", icon: "🎭", title: "2 mentiras y 1 verdad", desc: "Cada uno escribe 3 afirmaciones y el resto adivina la real." },
   { key: "duo", mode: "duo", icon: "⚡", title: "Respuestas en sincronía", desc: "Todos responden la misma pregunta en secreto y se revelan juntas." },
@@ -689,9 +695,15 @@ function updateDynamicOptions() {
   const dyn = getDynamic(selectedDynamicKey);
   $("opt-reveal-author-row").hidden = !dyn.author;
   $("opt-reveal-gender-row").hidden = !dyn.gender;
-  const warning = dyn.gender && $("chk-reveal-gender").checked && roomWatcher
-    ? singleGenderWarning(activePlayers(roomWatcher.players))
-    : "";
+  const players = roomWatcher ? activePlayers(roomWatcher.players) : [];
+  let warning = dyn.gender && $("chk-reveal-gender").checked ? singleGenderWarning(players) : "";
+  if (dyn.audience) {
+    const outsiders = players.filter((p) => p.gender !== dyn.audience).length;
+    if (outsiders > 0) {
+      const audienceLabel = dyn.audience === "hombre" ? "hombres" : "mujeres";
+      warning = `Esta dinámica está pensada para una junta solo de ${audienceLabel}, y en la sala hay ${outsiders} ${outsiders === 1 ? "persona" : "personas"} de otro género.`;
+    }
+  }
   $("single-gender-warning-box").hidden = !warning;
   $("lbl-single-gender-desc").textContent = warning;
 }
@@ -818,7 +830,7 @@ async function castVote(value, label, extra = {}) {
 function questionTypeLabel(info) {
   return {
     suspect: "👉 Voten por alguien",
-    choice: "🅰️/🅱️ Elijan una opción",
+    choice: info.options?.length > 2 ? "☝️ Elige una opción" : "🅰️/🅱️ Elijan una opción",
     yesno: "🙋 Sí o no, en secreto",
     open: "🎤 Ronda de respuesta",
   }[info.type];
@@ -856,15 +868,27 @@ function suspectResultsHtml(votes, players) {
     </div>`;
 }
 
+const OPTION_COLORS = ["var(--cyan)", "var(--pink)", "var(--purple)", "var(--emerald)", "var(--amber)", "var(--coral)"];
+
+function optionLetter(i) {
+  return String.fromCharCode(65 + i);
+}
+
 function choiceResultsHtml(votes, options) {
-  const counts = [0, 1].map((i) => votes.filter((v) => v.value === i).length);
-  const total = votes.length;
-  const winner = counts[0] === counts[1] ? -1 : counts[0] > counts[1] ? 0 : 1;
-  const headline = winner === -1 ? "🤝 ¡Empate total!" : `🏆 Ganó: ${escapeHtml(options[winner])}`;
+  const counts = options.map((_, i) => votes.filter((v) => v.value === i).length);
+  const max = Math.max(...counts);
+  const winners = counts.filter((c) => c === max).length;
+  const winner = winners === 1 ? counts.indexOf(max) : -1;
+  const headline = winner === -1 ? "🤝 ¡Empate!" : `🏆 Ganó: ${escapeHtml(options[winner])}`;
+  // Con más de 2 opciones se ordenan de más a menos votada
+  const order = options.map((_, i) => i);
+  if (options.length > 2) order.sort((a, b) => counts[b] - counts[a]);
   return `
     <div class="results-headline">${headline}</div>
     <div class="results-bars-list">
-      ${options.map((opt, i) => barRow(`${i === 0 ? "🅰️" : "🅱️"} ${escapeHtml(opt)}`, counts[i], total, { highlight: i === winner, color: i === 0 ? "var(--cyan)" : "var(--pink)" })).join("")}
+      ${order
+        .map((i) => barRow(`${optionLetter(i)}. ${escapeHtml(options[i])}`, counts[i], votes.length, { highlight: i === winner, color: OPTION_COLORS[i % OPTION_COLORS.length] }))
+        .join("")}
     </div>`;
 }
 
@@ -968,7 +992,7 @@ function renderPreguntas(w) {
     `
     <div class="question-hero">
       <span class="type-badge">${questionTypeLabel(info)}</span>
-      <p class="question-hero-text">${escapeHtml(question)}</p>
+      <p class="question-hero-text">${escapeHtml(questionText(question))}</p>
     </div>
     ${privacy ? `<div class="notice notice-safe">${privacy}</div>` : ""}
     ${singleWarning ? `<div class="notice notice-warn">⚠️ ${singleWarning}</div>` : ""}
@@ -1013,7 +1037,8 @@ function renderPreguntas(w) {
         { value: "no", label: info.labels[1], html: info.labels[1], cls: "big no" },
       ];
     } else if (info.type === "choice") {
-      buttons = info.options.map((opt, i) => ({ value: i, label: opt, html: `<span class="opt-letter">${i === 0 ? "A" : "B"}</span> ${escapeHtml(opt)}`, cls: "option" }));
+      const cls = info.options.length > 2 ? "option compact" : "option";
+      buttons = info.options.map((opt, i) => ({ value: i, label: opt, html: `<span class="opt-letter">${optionLetter(i)}</span> ${escapeHtml(opt)}`, cls }));
     } else {
       buttons = players.map((p) => ({ value: p.id, label: p.name, html: `<span class="vote-avatar">${p.avatar || "👤"}</span> ${escapeHtml(p.name)}` }));
     }
@@ -1655,7 +1680,7 @@ function renderTvRoom(w) {
   if (room.mode === "preguntas") {
     const question = room.deck[room.pos] || "";
     const info = classifyGroupQuestion(question, room.category);
-    headline.textContent = question;
+    headline.textContent = questionText(question);
     if (info.type === "open") {
       results.innerHTML = room.speaker ? `<div class="results-headline">🎤 Responde: ${room.speaker.avatar} ${escapeHtml(room.speaker.name)}</div>` : "";
       return;

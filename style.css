@@ -1127,6 +1127,12 @@ select.input-field { cursor: pointer; }
   grid-column: 1 / -1;
 }
 
+.vote-btn.option.compact {
+  grid-column: auto;
+  font-size: 14px;
+  padding: 12px;
+}
+
 .opt-letter {
   flex-shrink: 0;
   width: 28px;
