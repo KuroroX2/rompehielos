@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Reglas de Firestore para RompeHielos. Se publican desde la consola de Firebase:
+// Firestore Database > Reglas > pegar este archivo > Publicar.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Salas en vivo: cualquiera con el código puede jugar (no hay login).
+    match /salas/{code} {
+      allow read: if true;
+      allow create, update: if code.matches('^[A-Z0-9]{4,8}$');
+      allow delete: if false;
+
+      // players, votos (v_*), confesiones (s_*), respuestas (d_*) y muro
+      match /{subcollection}/{docId} {
+        allow read: if true;
+        allow delete: if true;
+        allow create, update: if code.matches('^[A-Z0-9]{4,8}$')
+          && request.resource.data.get('text', '').size() <= 300
+          && request.resource.data.get('answer', '').size() <= 200
+          && request.resource.data.get('name', '').size() <= 40;
+      }
+    }
+
+    // Colección de la primera versión de la web (ya no se usa en la app).
+    match /categorias/{catId} {
+      allow read: if true;
+      match /{path=**} {
+        allow read: if true;
+      }
+    }
+  }
+}

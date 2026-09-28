@@ -1,6 +1,7 @@
-// app.js - Lógica principal y en tiempo real de RompeHielos
+// app.js - Lógica principal de RompeHielos
 import { firebaseConfig } from "./firebase-config.js";
 import { DEFAULT_CATEGORIES } from "./questions-data.js";
+import { classifyGroupQuestion, isChoiceQuestion } from "./question-types.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getFirestore,
@@ -8,172 +9,74 @@ import {
   doc,
   setDoc,
   getDoc,
-  addDoc,
   updateDoc,
+  deleteDoc,
+  addDoc,
   onSnapshot,
   query,
   orderBy,
+  limit,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-// ==========================================
-// 1. INICIALIZACIÓN DE FIREBASE & ESTADO
-// ==========================================
-let db = null;
-let firestoreAvailable = false;
-try {
-  const firebaseApp = initializeApp(firebaseConfig);
-  db = getFirestore(firebaseApp);
-  firestoreAvailable = true;
-} catch (e) {
-  console.warn("Firestore no disponible o en modo offline:", e);
-}
+const db = getFirestore(initializeApp(firebaseConfig));
 
-// Estado de categorías y preguntas (localStorage + Default)
-const STORAGE_KEY_CATEGORIES = "rompehielos_custom_categories_v2";
+// ==========================================
+// 1. BANCO DE PREGUNTAS (oficial + ediciones locales del admin)
+// ==========================================
+const STORAGE_KEY_CATEGORIES = "rompehielos_categories_v3";
+["rompehielos_custom_categories_v2"].forEach((oldKey) => {
+  try { localStorage.removeItem(oldKey); } catch {}
+});
+
 let categories = loadStoredCategories();
 
 function loadStoredCategories() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_CATEGORIES);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Asegurar que las nuevas categorías oficiales (como secretos_intimos) se integren
-        const existingIds = new Set(parsed.map((c) => c.id));
-        DEFAULT_CATEGORIES.forEach((defCat) => {
-          if (!existingIds.has(defCat.id)) {
-            parsed.unshift(defCat);
-          } else {
-            // Actualizar preguntas si la categoría oficial tiene más
-            const target = parsed.find((c) => c.id === defCat.id);
-            if (target && defCat.preguntas.length > target.preguntas.length) {
-              target.preguntas = defCat.preguntas;
-            }
-          }
-        });
-        localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(parsed));
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.error("Error cargando categorías de localStorage:", e);
-  }
-  return JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY_CATEGORIES) || "null");
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {}
+  return structuredClone(DEFAULT_CATEGORIES);
 }
 
-// Sincronización en tiempo real del Banco de Preguntas en la Nube (Firestore)
-async function syncCategoriesWithFirestore() {
-  if (!firestoreAvailable || !db) return;
-
-  try {
-    const configDocRef = doc(db, "configuracion", "banco_preguntas");
-    onSnapshot(configDocRef, (snap) => {
-      if (snap.exists()) {
-        const cloudData = snap.data();
-        if (Array.isArray(cloudData.categories) && cloudData.categories.length > 0) {
-          categories = cloudData.categories;
-          localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
-          renderSoloCategories();
-          if (document.getElementById("view-solo")?.classList.contains("active")) {
-            updateSoloCard();
-          }
-          if (isAdminLoggedIn) {
-            const select = document.getElementById("admin-select-category");
-            if (select) renderAdminQuestionsList(select.value);
-          }
-          const cloudStatusEl = document.getElementById("lbl-admin-cloud-status");
-          if (cloudStatusEl) {
-            cloudStatusEl.textContent = "☁️ Nube Activa (Sincronizado)";
-            cloudStatusEl.style.color = "#34d399";
-          }
-        }
-      }
-    });
-  } catch (err) {
-    console.warn("No se pudo conectar al banco de preguntas en Firestore:", err);
-  }
-}
-
-async function saveCategories(cats, syncCloud = true) {
+function saveCategories(cats) {
   categories = cats;
   try {
     localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(cats));
   } catch (e) {
-    console.error("Error guardando categorías en localStorage:", e);
-  }
-
-  // Guardar en la Nube (Firestore) para que impacte a TODOS los usuarios en cualquier dispositivo
-  if (syncCloud && firestoreAvailable && db) {
-    try {
-      const configDocRef = doc(db, "configuracion", "banco_preguntas");
-      await setDoc(configDocRef, {
-        categories: cats,
-        updatedAt: serverTimestamp(),
-      });
-      console.log("☁️ Preguntas guardadas en Firestore para todos los jugadores.");
-      showToast("Guardado en la Nube para todos los jugadores ☁️", "✓");
-    } catch (err) {
-      console.warn("Aviso al guardar en Firestore:", err);
-    }
+    showToast("No se pudo guardar en este dispositivo", "⚠️");
   }
 }
 
-// Estado del jugador y de la sala actual
-let currentSession = {
-  playerId: sessionStorage.getItem("rh_player_id") || "p_" + Math.random().toString(36).substring(2, 9),
-  playerName: sessionStorage.getItem("rh_player_name") || "",
-  playerAvatar: sessionStorage.getItem("rh_player_avatar") || "🦊",
-  playerGender: sessionStorage.getItem("rh_player_gender") || "hombre",
-  currentRoomId: null,
-  isHost: false,
-  unsubscribeRoom: null,
-  unsubscribePlayers: null,
-  unsubscribeEntries: null,
-  unsubscribeVotes: null,
-  unsubscribeMuro: null,
-  unsubscribeSecretos: null,
-  activeDynamic: null,
-  selectedCategory: categories[0]?.id || "dilemas_absurdos",
-  soloSubcategory: "all",
-  tableModeActive: true,
-  soloQuestionIndex: 0,
-  soloTurnPlayer: 1,
-  soloDeck: null,
-  secretosDeck: null,
-};
-sessionStorage.setItem("rh_player_id", currentSession.playerId);
-sessionStorage.setItem("rh_player_gender", currentSession.playerGender);
+function getCategory(id) {
+  return categories.find((c) => c.id === id) || DEFAULT_CATEGORIES.find((c) => c.id === id);
+}
 
 // ==========================================
-// 2. UTILIDADES VISUALES Y TOAST
+// 2. UTILIDADES
 // ==========================================
-const toastEl = document.getElementById("toast-notice");
-const toastMsg = document.getElementById("toast-msg");
-const toastIcon = document.getElementById("toast-icon");
+const $ = (id) => document.getElementById(id);
 let toastTimer = null;
 
 function showToast(msg, icon = "✨") {
-  if (!toastEl) return;
-  toastMsg.textContent = msg;
-  toastIcon.textContent = icon;
-  toastEl.classList.add("show");
+  $("toast-msg").textContent = msg;
+  $("toast-icon").textContent = icon;
+  $("toast-notice").classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    toastEl.classList.remove("show");
-  }, 3000);
+  toastTimer = setTimeout(() => $("toast-notice").classList.remove("show"), 3000);
 }
 
 function escapeHtml(str) {
-  if (!str) return "";
   const div = document.createElement("div");
-  div.textContent = str;
+  div.textContent = str ?? "";
   return div.innerHTML;
 }
 
-// Algoritmo Fisher-Yates para barajar preguntas al azar en todas las dinámicas
+function escapeAttr(str) {
+  return String(str ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;");
+}
+
 function shuffleArray(array) {
-  if (!Array.isArray(array)) return [];
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -182,12 +85,26 @@ function shuffleArray(array) {
   return arr;
 }
 
-// Partículas flotantes de hielo
+function randomId(len = 10) {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let out = "";
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
+
+function store(kind, key, value) {
+  try { (kind === "local" ? localStorage : sessionStorage).setItem(key, value); } catch {}
+}
+function load(kind, key) {
+  try { return (kind === "local" ? localStorage : sessionStorage).getItem(key); } catch { return null; }
+}
+function unstore(kind, key) {
+  try { (kind === "local" ? localStorage : sessionStorage).removeItem(key); } catch {}
+}
+
 function initParticles() {
-  const container = document.getElementById("particles-container");
-  if (!container) return;
-  const count = 18;
-  for (let i = 0; i < count; i++) {
+  const container = $("particles-container");
+  for (let i = 0; i < 18; i++) {
     const p = document.createElement("div");
     p.className = "particle";
     const size = Math.random() * 8 + 4;
@@ -200,2009 +117,1799 @@ function initParticles() {
   }
 }
 
-// Router simple de vistas
 function switchView(viewId) {
-  document.querySelectorAll(".view-screen").forEach((el) => el.classList.remove("active"));
-  const target = document.getElementById(viewId);
-  if (target) {
-    target.classList.add("active");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  document.querySelectorAll(".view-screen").forEach((el) => el.classList.toggle("active", el.id === viewId));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function activeViewId() {
+  return document.querySelector(".view-screen.active")?.id;
 }
 
 // ==========================================
-// 3. MODO 1 CELULAR (SOLO / EN PERSONA)
+// 3. MODO 1 CELULAR (2 personas en la mesa)
 // ==========================================
+const SOLO_CATEGORIES = ["citas_nivel1", "citas_nivel2", "citas_nivel3", "dilemas_absurdos"];
 
-// Compatibilidad estricta de categorías por modo de juego
-const MODE_COMPATIBLE_CATEGORIES = {
-  // Modo 1 Celular en la Mesa: Exclusivo para 2 personas (Citas románticas y preguntas cara a cara de a dos)
-  // Las dinámicas grupales con votaciones ("¿Quién es más probable?", "Secretos Íntimos / Yo he...") son exclusivas de Salas Multicelular.
-  solo: [
-    "citas_nivel1",
-    "citas_nivel2",
-    "citas_nivel3",
-    "dilemas_absurdos",
-  ],
-  // Modo Salas Multicelular: Dinámicas grupales con celulares, votaciones de sospechosos, anonimato y estadísticas en vivo
-  multiplayer: [
-    "secretos_intimos",
-    "quien_es_mas_probable",
-    "dilemas_absurdos",
-    "amigos_fiesta",
-    "empresas_trabajo",
-  ],
-  // Modo TV / Proyector: Pantalla gigante para eventos o carretes
-  tv: [
-    "quien_es_mas_probable",
-    "secretos_intimos",
-    "dilemas_absurdos",
-    "amigos_fiesta",
-    "empresas_trabajo",
-  ],
+const solo = {
+  categoryId: "citas_nivel1",
+  subcategory: "all",
+  deck: [],
+  index: 0,
+  tableMode: true,
 };
 
-// Clasificación inteligente de preguntas: Elección (A vs B / ¿Qué preferirías?) vs Preguntas Abiertas
-function classifyQuestion(qText) {
-  if (!qText) return "open";
-  const lower = qText.toLowerCase().trim();
-  if (
-    lower.startsWith("¿preferirías") ||
-    lower.startsWith("preferirías") ||
-    lower.startsWith("¿prefieres") ||
-    lower.startsWith("prefieres") ||
-    lower.includes("qué preferirías") ||
-    lower.includes("qué prefieres") ||
-    (lower.includes("¿") && lower.includes(" o ") && (lower.includes("elegirías") || lower.includes("eliges") || lower.includes("escoges") || lower.includes("sacrificas") || lower.includes("te quedarías")))
-  ) {
-    return "choice"; // 🅰️/🅱️ Dilema de Elección
-  }
-  return "open"; // 💬 Pregunta Abierta & Debate
+function filterBySubcategory(questions, sub) {
+  if (sub === "all") return questions;
+  const filtered = questions.filter((q) => isChoiceQuestion(q) === (sub === "choice"));
+  return filtered.length > 0 ? filtered : questions;
 }
 
-function renderSoloCategories() {
-  const soloGrid = document.getElementById("solo-categories-grid");
-  const soloCats = categories.filter((c) => MODE_COMPATIBLE_CATEGORIES.solo.includes(c.id));
-
-  const generateCardHtml = (cat) => {
-    const totalCount = cat.preguntas.length;
-    const choiceCount = cat.preguntas.filter((q) => classifyQuestion(q) === "choice").length;
-    const openCount = totalCount - choiceCount;
-
-    return `
-      <div class="category-card" data-catid="${cat.id}">
-        <div class="category-top">
-          <span class="cat-emoji">${cat.icono || "🧊"}</span>
-          <span class="cat-badge" style="color:${cat.color || "var(--cyan)"}">${cat.badge || "Pack"}</span>
-        </div>
-        <h4>${escapeHtml(cat.titulo)}</h4>
-        <p>${escapeHtml(cat.descripcion)}</p>
-        <div style="font-size:11.5px; color:var(--text-muted); margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;">
-          <span style="background:rgba(168,85,247,0.12); color:#c084fc; padding:2px 6px; border-radius:10px;">🅰️/🅱️ ${choiceCount} elección</span>
-          <span style="background:rgba(56,189,248,0.12); color:var(--cyan); padding:2px 6px; border-radius:10px;">💬 ${openCount} abiertas</span>
-        </div>
-        <div class="cat-meta">
-          <span>${totalCount} preguntas al azar</span>
-          <strong style="color:var(--cyan)">Jugar ➔</strong>
-        </div>
-      </div>
-    `;
-  };
-
-  if (soloGrid) {
-    soloGrid.innerHTML = soloCats.map(generateCardHtml).join("");
-    soloGrid.querySelectorAll(".category-card").forEach((card) => {
-      card.addEventListener("click", () => {
-        const catId = card.getAttribute("data-catid");
-        startSoloMode(catId, currentSession.soloSubcategory || "all");
-      });
-    });
-  }
-
-  // Setup de botones de subcategoría en el selector de 1 Celular
-  document.querySelectorAll(".subcat-pill").forEach((pill) => {
-    pill.onclick = () => {
-      document.querySelectorAll(".subcat-pill").forEach((p) => p.classList.remove("active"));
-      pill.classList.add("active");
-      const sub = pill.getAttribute("data-subcat") || "all";
-      currentSession.soloSubcategory = sub;
-      showToast(
-        sub === "choice"
-          ? "Filtrando: Solo Dilemas de Elección (¿Qué Preferirías?)"
-          : sub === "open"
-          ? "Filtrando: Solo Preguntas Abiertas & Debate"
-          : "Mostrando Todas las Preguntas",
-        sub === "choice" ? "🅰️/🅱️" : sub === "open" ? "💬" : "🎯"
-      );
-    };
+function setChipGroup(containerId, sub) {
+  document.querySelectorAll(`#${containerId} .filter-chip`).forEach((chip) => {
+    chip.classList.toggle("active", chip.dataset.subcat === sub);
   });
 }
 
-function renderHomeCategories() {
-  renderSoloCategories();
+function renderSoloCategories() {
+  const grid = $("solo-categories-grid");
+  grid.innerHTML = SOLO_CATEGORIES.map(getCategory)
+    .filter(Boolean)
+    .map((cat) => {
+      const choiceCount = cat.preguntas.filter(isChoiceQuestion).length;
+      return `
+        <div class="category-card" data-catid="${cat.id}" role="button" tabindex="0">
+          <div class="category-top">
+            <span class="cat-emoji">${cat.icono || "🧊"}</span>
+            <span class="cat-badge" style="color:${cat.color || "var(--cyan)"}">${escapeHtml(cat.badge || "Pack")}</span>
+          </div>
+          <h4>${escapeHtml(cat.titulo)}</h4>
+          <p>${escapeHtml(cat.descripcion)}</p>
+          <div class="cat-counts">
+            <span class="count-chip choice">🅰️/🅱️ ${choiceCount}</span>
+            <span class="count-chip open">💬 ${cat.preguntas.length - choiceCount}</span>
+          </div>
+          <div class="cat-meta">
+            <span>${cat.preguntas.length} preguntas</span>
+            <strong>Jugar ➔</strong>
+          </div>
+        </div>`;
+    })
+    .join("");
+  setChipGroup("solo-subcat-chips", solo.subcategory);
 }
 
-function loadAndFilterSoloDeck() {
-  const cat = categories.find((c) => c.id === currentSession.selectedCategory) || categories[0];
-  let filtered = [...cat.preguntas];
-  const sub = currentSession.soloSubcategory || "all";
+$("solo-categories-grid").addEventListener("click", (e) => {
+  const card = e.target.closest(".category-card");
+  if (card) startSoloMode(card.dataset.catid);
+});
 
-  if (sub === "choice") {
-    const choiceList = filtered.filter((q) => classifyQuestion(q) === "choice");
-    filtered = choiceList.length > 0 ? choiceList : filtered;
-  } else if (sub === "open") {
-    const openList = filtered.filter((q) => classifyQuestion(q) === "open");
-    filtered = openList.length > 0 ? openList : filtered;
-  }
+$("solo-subcat-chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".filter-chip");
+  if (!chip) return;
+  solo.subcategory = chip.dataset.subcat;
+  setChipGroup("solo-subcat-chips", solo.subcategory);
+});
 
-  currentSession.soloDeck = shuffleArray(filtered);
-}
+$("solo-filter-chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".filter-chip");
+  if (!chip) return;
+  solo.subcategory = chip.dataset.subcat;
+  reshuffleSoloDeck();
+});
 
-function startSoloMode(categoryId, subcategory = "all") {
-  currentSession.selectedCategory = categoryId;
-  currentSession.soloSubcategory = subcategory;
-  loadAndFilterSoloDeck();
-  currentSession.soloQuestionIndex = 0;
-  currentSession.soloTurnPlayer = 1;
+function reshuffleSoloDeck() {
+  const cat = getCategory(solo.categoryId);
+  solo.deck = shuffleArray(filterBySubcategory(cat.preguntas, solo.subcategory));
+  solo.index = 0;
   updateSoloCard();
+}
+
+function startSoloMode(categoryId) {
+  solo.categoryId = categoryId;
+  reshuffleSoloDeck();
   switchView("view-solo");
 }
 
+// El turno se deduce de la posición: pregunta par = Jugador 1, impar = Jugador 2
 function updateSoloCard() {
-  const cat = categories.find((c) => c.id === currentSession.selectedCategory) || categories[0];
-  if (!currentSession.soloDeck || currentSession.soloDeck.length === 0) {
-    loadAndFilterSoloDeck();
-  }
-  const qList = currentSession.soloDeck;
-  if (!qList || qList.length === 0) {
-    document.getElementById("solo-question-text").textContent = "No hay preguntas disponibles con este filtro.";
+  const cat = getCategory(solo.categoryId);
+  const total = solo.deck.length;
+  if (total === 0) {
+    $("solo-question-text").textContent = "No hay preguntas en esta temática.";
     return;
   }
+  solo.index = ((solo.index % total) + total) % total;
+  const question = solo.deck[solo.index];
+  const isP1 = solo.index % 2 === 0;
 
-  // Rebarajar si se recorrieron todas
-  if (currentSession.soloQuestionIndex >= qList.length) {
-    loadAndFilterSoloDeck();
-    currentSession.soloQuestionIndex = 0;
-    showToast("¡Mazo rebarajado al azar! 🔀", "🎲");
-  }
+  const typeBadge = $("solo-subcat-badge");
+  const choice = isChoiceQuestion(question);
+  typeBadge.textContent = choice ? "🅰️/🅱️ Elección" : "💬 Abierta";
+  typeBadge.classList.toggle("is-choice", choice);
 
-  const idx = Math.max(0, Math.min(currentSession.soloQuestionIndex, currentSession.soloDeck.length - 1));
-  currentSession.soloQuestionIndex = idx;
-  const currentQ = currentSession.soloDeck[idx];
-
-  // Clasificación de la pregunta actual (Elección vs Abierta)
-  const qType = classifyQuestion(currentQ);
-  const subcatBadge = document.getElementById("solo-subcat-badge");
-  if (subcatBadge) {
-    if (qType === "choice") {
-      subcatBadge.textContent = "🅰️/🅱️ Elección (¿Qué Preferirías?)";
-      subcatBadge.style.color = "#c084fc";
-      subcatBadge.style.background = "rgba(168, 85, 247, 0.15)";
-      subcatBadge.style.borderColor = "rgba(168, 85, 247, 0.4)";
-    } else {
-      subcatBadge.textContent = "💬 Pregunta Abierta";
-      subcatBadge.style.color = "var(--cyan)";
-      subcatBadge.style.background = "rgba(56, 189, 248, 0.15)";
-      subcatBadge.style.borderColor = "rgba(56, 189, 248, 0.4)";
-    }
-  }
-
-  // Animación de pulso
-  const card = document.getElementById("solo-question-card");
+  const card = $("solo-question-card");
   card.classList.remove("shake");
   void card.offsetWidth;
   card.classList.add("shake");
 
-  // Modo Mesa: Rotación 180° de TODA la arena (Tarjeta Y Botones de acción juntos) según el turno
-  const arena = document.getElementById("solo-rotating-arena");
-  if (arena) {
-    if (currentSession.tableModeActive && currentSession.soloTurnPlayer === 2) {
-      arena.classList.add("rotate-180");
-    } else {
-      arena.classList.remove("rotate-180");
-    }
-  }
+  $("solo-rotating-arena").classList.toggle("rotate-180", solo.tableMode && !isP1);
+  $("top-player-bar").classList.toggle("active-player", !isP1);
+  $("bottom-player-bar").classList.toggle("active-player", isP1);
+  $("lbl-top-player-instruction").textContent = isP1 ? "Escucha a Jugador 1" : "🗣️ Te toca preguntar";
+  $("lbl-bottom-player-instruction").textContent = isP1 ? "🗣️ Te toca preguntar" : "Escucha a Jugador 2";
 
-  // Actualización de las Barras Duales (Lado Superior P2 y Lado Inferior P1)
-  const isP1 = currentSession.soloTurnPlayer === 1;
-  const topBar = document.getElementById("top-player-bar");
-  const bottomBar = document.getElementById("bottom-player-bar");
-  const topInstruction = document.getElementById("lbl-top-player-instruction");
-  const bottomInstruction = document.getElementById("lbl-bottom-player-instruction");
+  const choiceCount = cat.preguntas.filter(isChoiceQuestion).length;
+  $("count-subcat-all").textContent = cat.preguntas.length;
+  $("count-subcat-choice").textContent = choiceCount;
+  $("count-subcat-open").textContent = cat.preguntas.length - choiceCount;
+  setChipGroup("solo-filter-chips", solo.subcategory);
 
-  if (topBar) {
-    if (!isP1) {
-      topBar.classList.add("active-player");
-      if (topInstruction) {
-        topInstruction.textContent = "🗣️ ¡TU TURNO DE PREGUNTAR!";
-        topInstruction.style.color = "#fda4af";
-      }
-    } else {
-      topBar.classList.remove("active-player");
-      if (topInstruction) {
-        topInstruction.textContent = "⏳ Escuchando a Jugador 1...";
-        topInstruction.style.color = "var(--text-muted)";
-      }
-    }
-  }
-
-  if (bottomBar) {
-    if (isP1) {
-      bottomBar.classList.add("active-player");
-      if (bottomInstruction) {
-        bottomInstruction.textContent = "🗣️ ¡TU TURNO DE PREGUNTAR!";
-        bottomInstruction.style.color = "var(--cyan)";
-      }
-    } else {
-      bottomBar.classList.remove("active-player");
-      if (bottomInstruction) {
-        bottomInstruction.textContent = "⏳ Escuchando a Jugador 2...";
-        bottomInstruction.style.color = "var(--text-muted)";
-      }
-    }
-  }
-
-  // Contadores de subcategoría en el switch rápido
-  const totalCatCount = cat.preguntas.length;
-  const choiceCatCount = cat.preguntas.filter((q) => classifyQuestion(q) === "choice").length;
-  const openCatCount = totalCatCount - choiceCatCount;
-
-  const countAll = document.getElementById("count-subcat-all");
-  const countChoice = document.getElementById("count-subcat-choice");
-  const countOpen = document.getElementById("count-subcat-open");
-  if (countAll) countAll.textContent = totalCatCount;
-  if (countChoice) countChoice.textContent = choiceCatCount;
-  if (countOpen) countOpen.textContent = openCatCount;
-
-  // Actualizar botones de filtro activos dentro de la partida
-  document.querySelectorAll(".btn-subcat-filter").forEach((btn) => {
-    const f = btn.getAttribute("data-filter");
-    if (f === (currentSession.soloSubcategory || "all")) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
-  });
-
-  // Textos y contadores de la tarjeta
-  document.getElementById("solo-cat-badge").textContent = cat.titulo;
-  document.getElementById("solo-cat-badge").style.color = cat.color || "var(--cyan)";
-  document.getElementById("solo-counter").textContent = `🎲 ${idx + 1} / ${qList.length}`;
-  document.getElementById("solo-question-text").textContent = currentQ;
-
-  // Actualizar texto del botón de Modo Mesa
-  const tableModeText = document.getElementById("lbl-table-mode-text");
-  if (tableModeText) {
-    tableModeText.textContent = currentSession.tableModeActive ? "Modo Mesa: Gira 180°" : "Modo Mesa: Fijo";
-  }
+  $("solo-cat-badge").textContent = `${cat.icono || ""} ${cat.titulo}`;
+  $("solo-cat-badge").style.color = cat.color || "var(--cyan)";
+  $("solo-counter").textContent = `${solo.index + 1} / ${total}`;
+  $("solo-question-text").textContent = question;
+  $("lbl-table-mode-text").textContent = solo.tableMode ? "Giro: sí" : "Giro: no";
 }
 
-// Botón Toggle Modo Mesa (Giro automático 180° en mesa)
-document.getElementById("btn-toggle-table-mode")?.addEventListener("click", () => {
-  currentSession.tableModeActive = !currentSession.tableModeActive;
-  const arena = document.getElementById("solo-rotating-arena");
-  if (!currentSession.tableModeActive && arena) {
-    arena.classList.remove("rotate-180");
-  } else if (arena && currentSession.soloTurnPlayer === 2) {
-    arena.classList.add("rotate-180");
-  }
+function soloStep(delta) {
+  solo.index += delta;
   updateSoloCard();
-  showToast(
-    currentSession.tableModeActive
-      ? "Modo Mesa Activado: La tarjeta y botones giran 180° hacia quien le toca preguntar 🔄"
-      : "Modo Mesa Desactivado: Orientación fija 📱",
-    "🔄"
-  );
+}
+
+$("solo-question-card").addEventListener("click", () => soloStep(1));
+$("btn-solo-next").addEventListener("click", () => soloStep(1));
+$("btn-solo-prev").addEventListener("click", () => soloStep(-1));
+$("btn-solo-shuffle").addEventListener("click", () => {
+  reshuffleSoloDeck();
+  showToast("Preguntas barajadas", "🔀");
+});
+$("btn-toggle-table-mode").addEventListener("click", () => {
+  solo.tableMode = !solo.tableMode;
+  updateSoloCard();
+  showToast(solo.tableMode ? "La tarjeta gira hacia quien pregunta" : "La tarjeta queda fija", "🔄");
 });
 
-// Botón Giro Manual 180°
-document.getElementById("btn-turn-flip-manual")?.addEventListener("click", () => {
-  const arena = document.getElementById("solo-rotating-arena");
-  if (arena) {
-    arena.classList.toggle("rotate-180");
-    const isRotated = arena.classList.contains("rotate-180");
-    showToast(isRotated ? "Giro 180° aplicado (hacia Jugador 2)" : "Orientación original (hacia Jugador 1)", "🔄");
-  }
-});
+function openSoloCategories() {
+  renderSoloCategories();
+  switchView("view-solo-categories");
+}
 
-// Filtros rápidos de subcategoría dentro del juego
-document.querySelectorAll(".btn-subcat-filter").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const f = btn.getAttribute("data-filter") || "all";
-    currentSession.soloSubcategory = f;
-    loadAndFilterSoloDeck();
-    currentSession.soloQuestionIndex = 0;
-    updateSoloCard();
-    showToast(
-      f === "choice"
-        ? "Filtrando: Solo Dilemas de Elección (¿Qué Preferirías?)"
-        : f === "open"
-        ? "Filtrando: Solo Preguntas Abiertas & Debate"
-        : "Mostrando todas las preguntas de la categoría",
-      f === "choice" ? "🅰️/🅱️" : f === "open" ? "💬" : "🎯"
+$("btn-back-solo").addEventListener("click", openSoloCategories);
+$("btn-back-solo-categories").addEventListener("click", () => switchView("view-home"));
+
+// ==========================================
+// 4. SALAS MULTICELULAR
+// ==========================================
+// Estructura en Firestore:
+//   salas/{code}                       estado compartido (dinámica, fase, ronda, pregunta actual)
+//   salas/{code}/players/{playerId}    quién está conectado
+//   salas/{code}/v_{gameId}_{round}    votos anónimos (el id del doc es un token aleatorio)
+//   salas/{code}/s_{gameId}            confesiones o "2 mentiras y 1 verdad" escritas
+//   salas/{code}/d_{gameId}_{round}    respuestas de "Respuestas en sincronía"
+//   salas/{code}/muro                  mensajes del muro anónimo
+// Solo el anfitrión avanza fases y rondas; todos los celulares reaccionan al snapshot.
+
+const HEARTBEAT_MS = 25000;
+const STALE_MS = 75000;
+
+const ROOM_DYNAMICS = [
+  { key: "quien_es_mas_probable", mode: "preguntas", category: "quien_es_mas_probable", icon: "👉", title: "¿Quién es más probable?", desc: "Cada uno vota por alguien del grupo y se revela el ranking." },
+  { key: "secretos_intimos", mode: "preguntas", category: "secretos_intimos", icon: "🔥", title: "Secretos íntimos (+18)", desc: "Afirmaciones picantes: cada uno vota Sí o No en secreto.", gender: true },
+  { key: "dilemas_absurdos", mode: "preguntas", category: "dilemas_absurdos", icon: "🤯", title: "Dilemas absurdos", desc: "Votan A o B, Sí o No, o a alguien le toca responder.", gender: true },
+  { key: "amigos_fiesta", mode: "preguntas", category: "amigos_fiesta", icon: "🍻", title: "Amigos y carrete", desc: "Anécdotas, votaciones y confesiones para el grupo.", gender: true },
+  { key: "empresas_trabajo", mode: "preguntas", category: "empresas_trabajo", icon: "💼", title: "Trabajo en equipo", desc: "Para conocer al equipo: rondas de respuesta y votaciones.", gender: true },
+  { key: "confesiones", mode: "confesiones", icon: "🕵️", title: "Confesiones anónimas", desc: "Cada uno escribe una confesión y el grupo adivina de quién es.", author: true },
+  { key: "tres", mode: "tres", icon: "🎭", title: "2 mentiras y 1 verdad", desc: "Cada uno escribe 3 afirmaciones y el resto adivina la real." },
+  { key: "duo", mode: "duo", icon: "⚡", title: "Respuestas en sincronía", desc: "Todos responden la misma pregunta en secreto y se revelan juntas." },
+  { key: "muro", mode: "muro", icon: "🧱", title: "Muro anónimo", desc: "Mensajes sin nombre que aparecen en vivo en todos los celulares." },
+];
+
+function getDynamic(key) {
+  return ROOM_DYNAMICS.find((d) => d.key === key) || ROOM_DYNAMICS[0];
+}
+
+const profile = {
+  playerId: load("session", "rh_player_id") || "p_" + randomId(10),
+  name: load("local", "rh_player_name") || "",
+  avatar: load("local", "rh_player_avatar") || "🦊",
+  gender: load("local", "rh_player_gender") || "hombre",
+};
+store("session", "rh_player_id", profile.playerId);
+
+let roomWatcher = null;       // sala en la que juega este celular
+let heartbeatTimer = null;
+let selectedDynamicKey = "quien_es_mas_probable";
+let lastPanelKey = null;
+
+function activePlayers(players) {
+  const now = Date.now();
+  return players.filter((p) => !p.lastSeen || now - p.lastSeen < STALE_MS);
+}
+
+function isHost() {
+  return !!roomWatcher?.room && roomWatcher.room.hostId === profile.playerId;
+}
+
+function roomRef(code) {
+  return doc(db, "salas", code);
+}
+
+function friendlyError(err) {
+  if (err?.code === "permission-denied") return "Firebase rechazó el acceso a la sala";
+  if (err?.code === "unavailable") return "Sin conexión a internet";
+  return err?.message || "Error desconocido";
+}
+
+// ---------- Observador de una sala (lo usan los jugadores y el Modo TV) ----------
+function createRoomWatcher(code, onUpdate, onMissing) {
+  const w = {
+    code, room: null, players: [], votes: [], subs: [], answers: [], muro: [],
+    roundKey: null, gameKey: null, unsubs: [], roundUnsubs: [], gameUnsubs: [],
+  };
+
+  const listen = (colName, field, target) => {
+    const unsub = onSnapshot(
+      collection(db, "salas", code, colName),
+      (snap) => {
+        w[field] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        onUpdate(w);
+      },
+      (err) => console.warn(`Error escuchando ${colName}:`, err)
     );
-  });
-});
+    target.push(unsub);
+  };
 
-// Botones modo Solo y navegación entre vistas de categorías
-document.getElementById("solo-question-card")?.addEventListener("click", () => {
-  currentSession.soloQuestionIndex++;
-  currentSession.soloTurnPlayer = currentSession.soloTurnPlayer === 1 ? 2 : 1;
-  updateSoloCard();
-});
+  const syncGameSubs = () => {
+    const r = w.room;
+    const playing = r.state === "playing";
+    const gameKey = playing ? `${r.mode}|${r.gameId}` : null;
+    const roundKey = playing ? `${gameKey}|${r.round}` : null;
 
-document.getElementById("btn-solo-next")?.addEventListener("click", () => {
-  currentSession.soloQuestionIndex++;
-  currentSession.soloTurnPlayer = currentSession.soloTurnPlayer === 1 ? 2 : 1;
-  updateSoloCard();
-});
+    if (gameKey !== w.gameKey) {
+      w.gameUnsubs.forEach((u) => u());
+      w.gameUnsubs = [];
+      w.subs = [];
+      w.muro = [];
+      w.gameKey = gameKey;
+      if (playing && (r.mode === "confesiones" || r.mode === "tres")) listen(`s_${r.gameId}`, "subs", w.gameUnsubs);
+      if (playing && r.mode === "muro") {
+        w.gameUnsubs.push(
+          onSnapshot(query(collection(db, "salas", code, "muro"), orderBy("createdAt", "desc"), limit(80)), (snap) => {
+            w.muro = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            onUpdate(w);
+          })
+        );
+      }
+    }
 
-document.getElementById("btn-solo-prev")?.addEventListener("click", () => {
-  if (currentSession.soloDeck && currentSession.soloDeck.length > 0) {
-    currentSession.soloQuestionIndex = (currentSession.soloQuestionIndex - 1 + currentSession.soloDeck.length) % currentSession.soloDeck.length;
-    updateSoloCard();
-  }
-});
+    if (roundKey !== w.roundKey) {
+      w.roundUnsubs.forEach((u) => u());
+      w.roundUnsubs = [];
+      w.votes = [];
+      w.answers = [];
+      w.roundKey = roundKey;
+      if (playing && ["preguntas", "confesiones", "tres"].includes(r.mode)) listen(`v_${r.gameId}_${r.round}`, "votes", w.roundUnsubs);
+      if (playing && r.mode === "duo") listen(`d_${r.gameId}_${r.round}`, "answers", w.roundUnsubs);
+    }
+  };
 
-document.getElementById("btn-solo-shuffle")?.addEventListener("click", () => {
-  loadAndFilterSoloDeck();
-  currentSession.soloQuestionIndex = 0;
-  updateSoloCard();
-  showToast("¡Preguntas rebarajadas al azar! 🎲", "🔀");
-});
+  w.unsubs.push(
+    onSnapshot(
+      roomRef(code),
+      (snap) => {
+        if (!snap.exists()) {
+          onMissing?.(w);
+          return;
+        }
+        w.room = snap.data();
+        syncGameSubs();
+        onUpdate(w);
+      },
+      (err) => showToast(friendlyError(err), "⚠️")
+    )
+  );
+  w.unsubs.push(
+    onSnapshot(collection(db, "salas", code, "players"), (snap) => {
+      w.players = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+      onUpdate(w);
+    })
+  );
 
-document.getElementById("btn-solo-toggle-turn")?.addEventListener("click", () => {
-  currentSession.soloTurnPlayer = currentSession.soloTurnPlayer === 1 ? 2 : 1;
-  updateSoloCard();
-  showToast(`Ahora es el turno del Jugador ${currentSession.soloTurnPlayer}`, "🔄");
-});
+  w.stop = () => [...w.unsubs, ...w.roundUnsubs, ...w.gameUnsubs].forEach((u) => u());
+  return w;
+}
 
-document.getElementById("solo-turn-badge")?.addEventListener("click", () => {
-  currentSession.soloTurnPlayer = currentSession.soloTurnPlayer === 1 ? 2 : 1;
-  updateSoloCard();
-});
+// ---------- Perfil: avatar y género ----------
+function setupProfilePickers() {
+  $("input-player-name").value = profile.name;
 
-document.getElementById("btn-solo-change-cat")?.addEventListener("click", () => {
-  renderSoloCategories();
-  switchView("view-solo-categories");
-});
-
-document.getElementById("btn-back-solo")?.addEventListener("click", () => {
-  renderSoloCategories();
-  switchView("view-solo-categories");
-});
-
-document.getElementById("btn-back-solo-categories")?.addEventListener("click", () => {
-  switchView("view-home");
-});
-
-// Navegación de los 3 Modos desde el Home Hub
-document.getElementById("card-start-solo")?.addEventListener("click", () => {
-  renderSoloCategories();
-  switchView("view-solo-categories");
-});
-
-document.getElementById("card-start-multi")?.addEventListener("click", () => {
-  switchView("view-lobby");
-});
-
-document.getElementById("card-start-tv")?.addEventListener("click", () => {
-  const room = currentSession.currentRoomId || "HIELO";
-  enterTvMode(room);
-});
-
-// ==========================================
-// 4. SALAS MULTICELULAR (MULTIPLAYER LOBBY)
-// ==========================================
-function setupAvatarPicker() {
-  const opts = document.querySelectorAll(".avatar-opt");
-  opts.forEach((opt) => {
+  const avatars = document.querySelectorAll(".avatar-opt");
+  avatars.forEach((opt) => {
+    opt.classList.toggle("selected", opt.dataset.avatar === profile.avatar);
     opt.addEventListener("click", () => {
-      opts.forEach((o) => o.classList.remove("selected"));
+      avatars.forEach((o) => o.classList.remove("selected"));
       opt.classList.add("selected");
-      currentSession.playerAvatar = opt.getAttribute("data-avatar");
-      sessionStorage.setItem("rh_player_avatar", currentSession.playerAvatar);
+      profile.avatar = opt.dataset.avatar;
+      store("local", "rh_player_avatar", profile.avatar);
+    });
+  });
+
+  const genders = document.querySelectorAll("#gender-picker .segmented-opt");
+  genders.forEach((opt) => {
+    opt.classList.toggle("selected", opt.dataset.gender === profile.gender);
+    opt.addEventListener("click", () => {
+      genders.forEach((o) => o.classList.remove("selected"));
+      opt.classList.add("selected");
+      profile.gender = opt.dataset.gender;
+      store("local", "rh_player_gender", profile.gender);
     });
   });
 }
 
-function setupGenderPicker() {
-  const pills = document.querySelectorAll(".gender-radio-pill");
-  pills.forEach((p) => {
-    p.addEventListener("click", () => {
-      pills.forEach((x) => x.classList.remove("selected"));
-      p.classList.add("selected");
-      const radio = p.querySelector('input[type="radio"]');
-      if (radio) {
-        radio.checked = true;
-        currentSession.playerGender = radio.value;
-        sessionStorage.setItem("rh_player_gender", radio.value);
-      }
-    });
-  });
-  // Restaurar el seleccionado en base al estado
-  pills.forEach((p) => {
-    const radio = p.querySelector('input[type="radio"]');
-    if (radio && radio.value === currentSession.playerGender) {
-      p.classList.add("selected");
-      radio.checked = true;
-    } else {
-      p.classList.remove("selected");
-    }
-  });
+function readPlayerName() {
+  const input = $("input-player-name");
+  const name = input.value.trim();
+  if (!name) {
+    showToast("Escribe tu nombre primero", "✍️");
+    input.focus();
+    return null;
+  }
+  profile.name = name;
+  store("local", "rh_player_name", name);
+  return name;
 }
 
 function generateRoomCode() {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
-  for (let i = 0; i < 5; i++) {
-    code += letters.charAt(Math.floor(Math.random() * letters.length));
-  }
+  for (let i = 0; i < 5; i++) code += letters.charAt(Math.floor(Math.random() * letters.length));
   return code;
 }
 
-// Crear sala
-document.getElementById("btn-create-room")?.addEventListener("click", async () => {
-  const nameInput = document.getElementById("input-player-name");
-  const name = nameInput.value.trim();
-  if (!name) {
-    showToast("Por favor ingresa tu nombre", "⚠️");
-    nameInput.focus();
-    return;
-  }
-  currentSession.playerName = name;
-  sessionStorage.setItem("rh_player_name", name);
+async function writePlayerDoc(code) {
+  await setDoc(doc(db, "salas", code, "players", profile.playerId), {
+    name: profile.name,
+    avatar: profile.avatar,
+    gender: profile.gender,
+    joinedAt: Date.now(),
+    lastSeen: Date.now(),
+  });
+}
 
-  const roomCode = generateRoomCode();
-  currentSession.currentRoomId = roomCode;
-  currentSession.isHost = true;
-
+// ---------- Crear, unirse, salir ----------
+$("btn-create-room").addEventListener("click", async () => {
+  if (!readPlayerName()) return;
+  const btn = $("btn-create-room");
+  btn.disabled = true;
   try {
-    if (firestoreAvailable && db) {
-      await setDoc(doc(db, "salas", roomCode), {
-        code: roomCode,
-        hostId: currentSession.playerId,
-        hostName: name,
-        gameMode: "secretos_cruzados",
-        state: "lobby", // lobby, writing, voting, results, muro
-        revealAuthor: document.getElementById("chk-reveal-truth")?.checked ?? true,
-        currentRound: 0,
-        createdAt: serverTimestamp(),
-      });
-
-      // Añadirse como jugador con su género
-      await setDoc(doc(db, "salas", roomCode, "players", currentSession.playerId), {
-        id: currentSession.playerId,
-        name: name,
-        avatar: currentSession.playerAvatar,
-        gender: currentSession.playerGender,
-        isHost: true,
-        connectedAt: serverTimestamp(),
-      });
-    }
-
-    enterRoomView(roomCode);
-    showToast("¡Sala creada con éxito!", "🎉");
-  } catch (err) {
-    console.error("Error al crear sala en Firestore:", err);
-    // Modo simulación local por si las reglas de firestore dan error
-    enterRoomView(roomCode);
-    showToast("Sala local activa (código: " + roomCode + ")", "🧊");
-  }
-});
-
-// Toggle unirse
-document.getElementById("btn-toggle-join-mode")?.addEventListener("click", () => {
-  const container = document.getElementById("join-code-container");
-  container.style.display = container.style.display === "none" ? "block" : "none";
-  if (container.style.display === "block") {
-    document.getElementById("input-room-code").focus();
-  }
-});
-
-// Unirse a sala existente
-document.getElementById("btn-submit-join")?.addEventListener("click", async () => {
-  const nameInput = document.getElementById("input-player-name");
-  const name = nameInput.value.trim();
-  if (!name) {
-    showToast("Ingresa tu nombre antes de unirte", "⚠️");
-    nameInput.focus();
-    return;
-  }
-  const codeInput = document.getElementById("input-room-code");
-  const roomCode = codeInput.value.trim().toUpperCase();
-  if (!roomCode || roomCode.length < 3) {
-    showToast("Ingresa un código de sala válido", "⚠️");
-    return;
-  }
-
-  currentSession.playerName = name;
-  sessionStorage.setItem("rh_player_name", name);
-  currentSession.currentRoomId = roomCode;
-  currentSession.isHost = false;
-
-  try {
-    if (firestoreAvailable && db) {
-      const roomRef = doc(db, "salas", roomCode);
-      const roomSnap = await getDoc(roomRef);
-      if (!roomSnap.exists()) {
-        showToast("La sala " + roomCode + " no existe.", "❌");
-        return;
-      }
-      const data = roomSnap.data();
-      currentSession.isHost = data.hostId === currentSession.playerId;
-
-      await setDoc(doc(db, "salas", roomCode, "players", currentSession.playerId), {
-        id: currentSession.playerId,
-        name: name,
-        avatar: currentSession.playerAvatar,
-        gender: currentSession.playerGender,
-        isHost: currentSession.isHost,
-        connectedAt: serverTimestamp(),
-      });
-    }
-
-    enterRoomView(roomCode);
-    showToast("¡Te has unido a la sala!", "🚀");
-  } catch (err) {
-    console.error("Error al unirse a sala:", err);
-    enterRoomView(roomCode);
-  }
-});
-
-// Entrar a la interfaz de sala de espera
-function enterRoomView(roomCode) {
-  document.getElementById("lobby-join-create-box").style.display = "none";
-  document.getElementById("lobby-active-room-box").style.display = "block";
-  document.getElementById("lbl-room-code").textContent = roomCode;
-  document.getElementById("tv-room-code-display").textContent = roomCode;
-
-  // Actualizar controles de Host vs Jugador
-  const hostControls = document.getElementById("host-game-controls");
-  const waitMsg = document.getElementById("non-host-wait-msg");
-  if (currentSession.isHost) {
-    hostControls.style.display = "block";
-    waitMsg.style.display = "none";
-    document.getElementById("lbl-host-indicator").textContent = "👑 Eres el Anfitrión";
-  } else {
-    hostControls.style.display = "none";
-    waitMsg.style.display = "block";
-    document.getElementById("lbl-host-indicator").textContent = "Esperando al anfitrión...";
-  }
-
-  generateQrCodes(roomCode);
-  listenToRoom(roomCode);
-  switchView("view-lobby");
-}
-
-function generateQrCodes(roomCode) {
-  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}&color=070a12&bgcolor=ffffff`;
-  const tvQr = document.getElementById("tv-qr-container");
-  if (tvQr) {
-    tvQr.innerHTML = `<img src="${qrUrl}" alt="QR Sala" style="width:140px;height:140px;display:block;border-radius:6px;">`;
-  }
-}
-
-// Copiar código o link
-document.getElementById("btn-copy-room-code")?.addEventListener("click", () => {
-  const code = currentSession.currentRoomId;
-  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${code}`;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(shareUrl);
-    showToast("¡Enlace copiado al portapapeles!", "📋");
-  } else {
-    showToast(`Código: ${code}`, "📋");
-  }
-});
-
-function shareViaWhatsApp(roomCode) {
-  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
-  const text = `🧊 ¡Únete a mi sala de RompeHielos! Entra directo con este enlace para jugar: ${shareUrl}`;
-  const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-  window.open(waUrl, "_blank");
-}
-
-document.getElementById("btn-share-whatsapp")?.addEventListener("click", () => {
-  const code = currentSession.currentRoomId || "HIELO";
-  shareViaWhatsApp(code);
-});
-
-document.getElementById("btn-share-copy-link")?.addEventListener("click", () => {
-  const code = currentSession.currentRoomId || "HIELO";
-  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${code}`;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(shareUrl);
-    showToast("¡Enlace directo copiado al portapapeles!", "🔗");
-  } else {
-    showToast(`Enlace: ${shareUrl}`, "🔗");
-  }
-});
-
-let currentRoomPlayers = [];
-
-// Escuchar cambios de la sala en tiempo real
-function listenToRoom(roomCode) {
-  if (!firestoreAvailable || !db) {
-    // Simulación para prueba sin conexión
-    renderLocalPlayerChip();
-    return;
-  }
-
-  // 1. Escuchar jugadores de la sala
-  const playersCol = collection(db, "salas", roomCode, "players");
-  currentSession.unsubscribePlayers = onSnapshot(playersCol, (snap) => {
-    const listEl = document.getElementById("room-players-list");
-    const tvListEl = document.getElementById("tv-players-list");
-    if (!listEl) return;
-    listEl.innerHTML = "";
-    if (tvListEl) tvListEl.innerHTML = "";
-
-    let count = 0;
-    let hombres = 0;
-    let mujeres = 0;
-    let otros = 0;
-    currentRoomPlayers = [];
-
-    snap.forEach((pDoc) => {
-      count++;
-      const p = pDoc.data();
-      const pId = p.id || pDoc.id;
-      currentRoomPlayers.push({
-        id: pId,
-        name: p.name || "Jugador",
-        avatar: p.avatar || "👤",
-        gender: p.gender || "hombre",
-        isHost: !!p.isHost,
-      });
-
-      const g = (p.gender || "hombre").toLowerCase();
-      if (g === "hombre") hombres++;
-      else if (g === "mujer") mujeres++;
-      else otros++;
-
-      const chip = document.createElement("div");
-      chip.className = `player-chip ${p.isHost ? "is-host" : ""}`;
-      chip.innerHTML = `<span>${p.avatar || "👤"}</span> <span>${escapeHtml(p.name)}</span> ${p.isHost ? "👑" : ""}`;
-      listEl.appendChild(chip);
-
-      if (tvListEl) {
-        const tvChip = chip.cloneNode(true);
-        tvListEl.appendChild(tvChip);
-      }
+    let code = generateRoomCode();
+    for (let i = 0; i < 3 && (await getDoc(roomRef(code))).exists(); i++) code = generateRoomCode();
+    await setDoc(roomRef(code), {
+      code,
+      hostId: profile.playerId,
+      state: "lobby",
+      createdAt: serverTimestamp(),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     });
+    await writePlayerDoc(code);
+    enterRoom(code);
+    showToast(`Sala ${code} creada`, "🎉");
+  } catch (err) {
+    console.error(err);
+    showToast("No se pudo crear la sala: " + friendlyError(err), "❌");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
-    currentRoomGenderCounts = { hombres, mujeres, otros };
-    document.getElementById("lbl-player-count").textContent = count;
-    updateSingleGenderWarning();
-  });
+$("btn-toggle-join-mode").addEventListener("click", () => {
+  const container = $("join-code-container");
+  container.hidden = !container.hidden;
+  if (!container.hidden) $("input-room-code").focus();
+});
 
-  // 2. Escuchar estado general de la sala (cambio de fases / dinámicas)
-  const roomDocRef = doc(db, "salas", roomCode);
-  currentSession.unsubscribeRoom = onSnapshot(roomDocRef, (snap) => {
-    if (!snap.exists()) return;
-    const room = snap.data();
-    handleRoomStateChange(room);
-  });
-}
-
-let currentRoomGenderCounts = { hombres: 0, mujeres: 0, otros: 0 };
-
-function updateSingleGenderWarning() {
-  const warningBox = document.getElementById("single-gender-warning-box");
-  const descEl = document.getElementById("lbl-single-gender-desc");
-  const chkRevealGender = document.getElementById("chk-reveal-gender");
-  if (!warningBox || !descEl || !chkRevealGender) return;
-
-  const revealActive = chkRevealGender.checked;
-  const { hombres, mujeres } = currentRoomGenderCounts;
-
-  if (revealActive) {
-    if (hombres === 1 && mujeres === 1) {
-      warningBox.style.display = "block";
-      descEl.textContent = "Hay solo 1 hombre y 1 mujer en la sala. Al activar el desglose por sexo, aunque sea anónimo, las respuestas de ambos quedarán expuestas.";
-    } else if (hombres === 1) {
-      warningBox.style.display = "block";
-      descEl.textContent = "Solo hay 1 hombre en la sala. Aunque sea anónimo, al desglosar por sexo su respuesta quedará automáticamente en evidencia.";
-    } else if (mujeres === 1) {
-      warningBox.style.display = "block";
-      descEl.textContent = "Solo hay 1 mujer en la sala. Aunque sea anónimo, al desglosar por sexo su respuesta quedará automáticamente en evidencia.";
-    } else {
-      warningBox.style.display = "none";
+async function joinRoom(rawCode, { silent = false } = {}) {
+  const code = (rawCode || "").trim().toUpperCase();
+  if (code.length < 4) {
+    if (!silent) showToast("Ese código no es válido", "⚠️");
+    return false;
+  }
+  try {
+    const snap = await getDoc(roomRef(code));
+    if (!snap.exists()) {
+      if (!silent) showToast(`La sala ${code} no existe o ya se cerró`, "❌");
+      return false;
     }
-  } else {
-    warningBox.style.display = "none";
+    await writePlayerDoc(code);
+    enterRoom(code);
+    if (!silent) showToast(`Entraste a la sala ${code}`, "🚀");
+    return true;
+  } catch (err) {
+    console.error(err);
+    if (!silent) showToast("No se pudo entrar: " + friendlyError(err), "❌");
+    return false;
   }
 }
 
-document.getElementById("chk-reveal-gender")?.addEventListener("change", updateSingleGenderWarning);
+$("btn-submit-join").addEventListener("click", async () => {
+  if (!readPlayerName()) return;
+  const btn = $("btn-submit-join");
+  btn.disabled = true;
+  await joinRoom($("input-room-code").value);
+  btn.disabled = false;
+});
 
-function renderLocalPlayerChip() {
-  const listEl = document.getElementById("room-players-list");
-  if (!listEl) return;
-  listEl.innerHTML = `
-    <div class="player-chip is-host">
-      <span>${currentSession.playerAvatar}</span>
-      <span>${escapeHtml(currentSession.playerName || "Tú")}</span> 👑
-    </div>
-  `;
-  document.getElementById("lbl-player-count").textContent = "1";
-  currentRoomPlayers = [
-    {
-      id: currentSession.playerId,
-      name: currentSession.playerName || "Tú",
-      avatar: currentSession.playerAvatar || "👤",
-      gender: currentSession.playerGender || "hombre",
-      isHost: true,
-    }
-  ];
-  currentRoomGenderCounts = {
-    hombres: currentSession.playerGender === "hombre" ? 1 : 0,
-    mujeres: currentSession.playerGender === "mujer" ? 1 : 0,
-    otros: currentSession.playerGender === "otro" ? 1 : 0,
-  };
-  updateSingleGenderWarning();
+$("input-room-code").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("btn-submit-join").click();
+});
+
+function enterRoom(code) {
+  roomWatcher?.stop();
+  lastPanelKey = null;
+  store("session", "rh_room", code);
+  history.replaceState(null, "", window.location.pathname);
+
+  $("lobby-join-create-box").hidden = true;
+  $("lobby-active-room-box").hidden = false;
+  $("invited-room-banner").hidden = true;
+  $("lbl-room-code").textContent = code;
+
+  roomWatcher = createRoomWatcher(code, onRoomUpdate, () => {
+    showToast("La sala se cerró", "👋");
+    resetRoomUi();
+  });
+
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
+  if (activeViewId() !== "view-tv") switchView("view-lobby");
 }
 
-// Selector de dinámicas en el lobby
-const dynamicCards = document.querySelectorAll(".dynamic-card-radio");
-dynamicCards.forEach((card) => {
-  card.addEventListener("click", () => {
-    dynamicCards.forEach((c) => c.classList.remove("selected"));
-    card.classList.add("selected");
-  });
+function heartbeat() {
+  if (!roomWatcher) return;
+  updateDoc(doc(db, "salas", roomWatcher.code, "players", profile.playerId), { lastSeen: Date.now() }).catch(() => {});
+  maybeClaimHost();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") heartbeat();
 });
 
-// Anfitrión inicia dinámica
-document.getElementById("btn-start-dynamic")?.addEventListener("click", async () => {
-  const selectedCard = document.querySelector(".dynamic-card-radio.selected");
-  const mode = selectedCard?.getAttribute("data-mode") || "secretos_cruzados";
-  const catId = selectedCard?.getAttribute("data-cat") || "secretos_intimos";
-  const revealAuthor = document.getElementById("chk-reveal-truth")?.checked ?? true;
-  const revealGender = document.getElementById("chk-reveal-gender")?.checked ?? true;
-
-  const targetCategory = categories.find((c) => c.id === catId) || categories[0];
-  const shuffledSecretosOrder = shuffleArray([...Array(targetCategory.preguntas.length).keys()]);
-  currentRoomSecretosDeck = shuffledSecretosOrder;
-  currentSession.selectedRoomCategory = catId;
-
-  if (firestoreAvailable && db && currentSession.currentRoomId) {
-    try {
-      await updateDoc(doc(db, "salas", currentSession.currentRoomId), {
-        gameMode: mode,
-        category: catId,
-        state: mode === "muro_bano" ? "muro" : "writing",
-        revealAuthor: revealAuthor,
-        revealGender: revealGender,
-        currentRound: 0,
-        secretosRoundIndex: 0,
-        secretosDeck: shuffledSecretosOrder,
-        currentConfessionId: null,
-      });
-    } catch (e) {
-      console.error(e);
-    }
+// Si el anfitrión se desconectó, el jugador más antiguo que siga activo toma el control
+function maybeClaimHost() {
+  const w = roomWatcher;
+  if (!w?.room || isHost()) return;
+  const active = activePlayers(w.players);
+  const hostActive = active.some((p) => p.id === w.room.hostId);
+  if (!hostActive && active[0]?.id === profile.playerId) {
+    updateDoc(roomRef(w.code), { hostId: profile.playerId })
+      .then(() => showToast("Ahora eres el anfitrión de la sala", "👑"))
+      .catch(() => {});
   }
+}
 
-  // Despacho local
-  dispatchGameMode(mode, "writing", {
-    category: catId,
-    revealAuthor,
-    revealGender,
-    secretosRoundIndex: 0,
-    secretosDeck: shuffledSecretosOrder,
-  });
+async function leaveRoom() {
+  const w = roomWatcher;
+  if (!w) return;
+  const code = w.code;
+  const others = activePlayers(w.players).filter((p) => p.id !== profile.playerId);
+  try {
+    if (isHost() && others.length > 0) await updateDoc(roomRef(code), { hostId: others[0].id });
+    await deleteDoc(doc(db, "salas", code, "players", profile.playerId));
+  } catch (err) {
+    console.warn("Error al salir de la sala:", err);
+  }
+  resetRoomUi();
+  showToast("Saliste de la sala", "👋");
+}
+
+function resetRoomUi() {
+  roomWatcher?.stop();
+  roomWatcher = null;
+  clearInterval(heartbeatTimer);
+  unstore("session", "rh_room");
+  $("lobby-main-actions").hidden = false;
+  $("lobby-join-create-box").hidden = false;
+  $("lobby-active-room-box").hidden = true;
+  if (activeViewId() === "view-game") switchView("view-lobby");
+}
+
+$("btn-leave-room").addEventListener("click", () => {
+  if (confirm("¿Salir de la sala?")) leaveRoom();
 });
 
-// Manejo reactivo de estados de la sala para todos los celulares
-function handleRoomStateChange(room) {
-  const { gameMode, state } = room;
-  currentSession.activeDynamic = gameMode;
+// ---------- Compartir ----------
+function roomShareUrl(code) {
+  return `${window.location.origin}${window.location.pathname}?room=${code}`;
+}
 
-  if (state === "lobby") {
+async function copyText(text, okMsg) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(okMsg, "📋");
+  } catch {
+    showToast(text, "🔗");
+  }
+}
+
+$("btn-copy-room-code").addEventListener("click", () => {
+  if (roomWatcher) copyText(roomShareUrl(roomWatcher.code), "Enlace de la sala copiado");
+});
+
+$("btn-share-whatsapp").addEventListener("click", () => {
+  if (!roomWatcher) return;
+  const text = `🧊 ¡Únete a mi sala de RompeHielos! Código ${roomWatcher.code}: ${roomShareUrl(roomWatcher.code)}`;
+  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
+});
+
+$("btn-lobby-tv-shortcut").addEventListener("click", () => {
+  if (roomWatcher) openTv(roomWatcher.code);
+});
+
+// ---------- Sala de espera ----------
+function playerChipsHtml(players, hostId) {
+  return players
+    .map(
+      (p) => `<div class="player-chip ${p.id === hostId ? "is-host" : ""}">
+        <span>${p.avatar || "👤"}</span><span>${escapeHtml(p.name)}</span>${p.id === hostId ? " 👑" : ""}
+      </div>`
+    )
+    .join("");
+}
+
+function genderCounts(players) {
+  const counts = { hombre: 0, mujer: 0, otro: 0 };
+  players.forEach((p) => { counts[p.gender in counts ? p.gender : "otro"]++; });
+  return counts;
+}
+
+function singleGenderWarning(players) {
+  const { hombre, mujer } = genderCounts(players);
+  if (hombre === 1 && mujer === 1) return "Hay solo 1 hombre y 1 mujer: con el desglose por género se sabría qué votó cada uno.";
+  if (hombre === 1) return "Hay solo 1 hombre: con el desglose por género se sabría qué votó.";
+  if (mujer === 1) return "Hay solo 1 mujer: con el desglose por género se sabría qué votó.";
+  return "";
+}
+
+function renderDynamicsGrid() {
+  $("dynamics-grid").innerHTML = ROOM_DYNAMICS.map(
+    (d) => `
+      <button type="button" class="dynamic-card-radio ${d.key === selectedDynamicKey ? "selected" : ""}" data-key="${d.key}">
+        <span class="dyn-icon">${d.icon}</span>
+        <strong>${d.title}</strong>
+        <small>${d.desc}</small>
+      </button>`
+  ).join("");
+  updateDynamicOptions();
+}
+
+function updateDynamicOptions() {
+  const dyn = getDynamic(selectedDynamicKey);
+  $("opt-reveal-author-row").hidden = !dyn.author;
+  $("opt-reveal-gender-row").hidden = !dyn.gender;
+  const warning = dyn.gender && $("chk-reveal-gender").checked && roomWatcher
+    ? singleGenderWarning(activePlayers(roomWatcher.players))
+    : "";
+  $("single-gender-warning-box").hidden = !warning;
+  $("lbl-single-gender-desc").textContent = warning;
+}
+
+$("dynamics-grid").addEventListener("click", (e) => {
+  const card = e.target.closest(".dynamic-card-radio");
+  if (!card) return;
+  selectedDynamicKey = card.dataset.key;
+  document.querySelectorAll(".dynamic-card-radio").forEach((c) => c.classList.toggle("selected", c === card));
+  updateDynamicOptions();
+});
+
+$("chk-reveal-gender").addEventListener("change", updateDynamicOptions);
+
+function renderLobby(w) {
+  const active = activePlayers(w.players);
+  const host = isHost();
+  $("lbl-player-count").textContent = active.length;
+  $("room-players-list").innerHTML = playerChipsHtml(active, w.room.hostId);
+  const hostPlayer = w.players.find((p) => p.id === w.room.hostId);
+  $("lbl-host-indicator").textContent = host ? "👑 Eres el anfitrión" : `Anfitrión: ${hostPlayer?.name || "..."}`;
+  $("host-game-controls").hidden = !host;
+  $("non-host-wait-msg").hidden = host;
+  if (host) updateDynamicOptions();
+}
+
+function onRoomUpdate(w) {
+  if (!w.room) return;
+  renderLobby(w);
+  const view = activeViewId();
+  if (w.room.state === "playing") {
+    if (view === "view-lobby") switchView("view-game");
+    renderGame(w);
+  } else if (view === "view-game") {
+    lastPanelKey = null;
     switchView("view-lobby");
-    return;
-  }
-
-  dispatchGameMode(gameMode, state, room);
-}
-
-function dispatchGameMode(mode, state, roomData = {}) {
-  if (mode === "secretos_cruzados") {
-    switchView("view-game-secretos");
-    setupSecretosPhase(state, roomData);
-  } else if (mode === "confesiones") {
-    switchView("view-game-confesiones");
-    setupConfesionesPhase(state, roomData);
-  } else if (mode === "tres_confesiones") {
-    switchView("view-game-tres-confesiones");
-    setupTresConfesionesPhase(state, roomData);
-  } else if (mode === "muro_bano") {
-    switchView("view-game-muro");
-    setupMuroPhase();
-  } else if (mode === "duo_sync") {
-    switchView("view-game-duo");
-    setupDuoPhase();
-  } else if (mode === "feedback_equipo") {
-    // Reutiliza modo muro enfocado en virtudes
-    switchView("view-game-muro");
-    setupMuroPhase("🌟 Muro Positivo de Empresa");
   }
 }
 
-// ==========================================
-// 4.5. DINÁMICA: SECRETOS CRUZADOS (EL TERMÓMETRO ÍNTIMO)
-// ==========================================
-let secretosRoundIndex = 0;
-let secretosCurrentVotes = {};
-let currentRoomSecretosDeck = null;
-
-function setupSecretosPhase(state, roomData = {}) {
-  const targetCatId = roomData.category || currentSession.selectedRoomCategory || "secretos_intimos";
-  currentSession.selectedRoomCategory = targetCatId;
-  const cat = categories.find((c) => c.id === targetCatId) || categories[0];
-  const qList = cat.preguntas;
-  if (roomData.secretosRoundIndex !== undefined) {
-    secretosRoundIndex = roomData.secretosRoundIndex;
-  }
-
-  // Sincronizar o inicializar el mazo de preguntas al azar para la sala
-  if (Array.isArray(roomData.secretosDeck) && roomData.secretosDeck.length > 0) {
-    currentRoomSecretosDeck = roomData.secretosDeck;
-  } else if (!currentRoomSecretosDeck || currentRoomSecretosDeck.length !== qList.length) {
-    currentRoomSecretosDeck = shuffleArray([...Array(qList.length).keys()]);
-  }
-
-  const statementIndex = currentRoomSecretosDeck[secretosRoundIndex % currentRoomSecretosDeck.length];
-  const currentStatement = qList[statementIndex] || qList[secretosRoundIndex % qList.length];
-
-  document.getElementById("lbl-secreto-statement").textContent = `"${currentStatement}"`;
-  document.getElementById("lbl-secretos-counter").textContent = `${cat.titulo} • Ronda ${(secretosRoundIndex % qList.length) + 1} de ${qList.length} (Al azar 🎲)`;
-
-  // Configuración de desglose por sexo
-  const revealGender = roomData.revealGender !== undefined
-    ? roomData.revealGender
-    : (document.getElementById("chk-reveal-gender")?.checked ?? true);
-  currentSession.revealGender = revealGender;
-
-  const breakdownContainer = document.getElementById("secretos-gender-breakdown-list");
-  if (breakdownContainer) {
-    breakdownContainer.style.display = revealGender ? "flex" : "none";
-  }
-
-  // Alerta si este jugador es el único hombre o mujer y el desglose está activo
-  const singleNotice = document.getElementById("secretos-single-gender-notice");
-  const singleNoticeText = document.getElementById("lbl-secretos-single-gender-text");
-  if (singleNotice && singleNoticeText) {
-    const myGender = (currentSession.playerGender || "hombre").toLowerCase();
-    const { hombres, mujeres } = currentRoomGenderCounts;
-    if (revealGender && myGender === "hombre" && hombres === 1) {
-      singleNotice.style.display = "block";
-      singleNoticeText.textContent = "Aviso de Deducción: Eres el único hombre en la sala. Al estar activo el desglose por sexo, el grupo podrá saber qué respondiste.";
-    } else if (revealGender && myGender === "mujer" && mujeres === 1) {
-      singleNotice.style.display = "block";
-      singleNoticeText.textContent = "Aviso de Deducción: Eres la única mujer en la sala. Al estar activo el desglose por sexo, el grupo podrá saber qué respondiste.";
-    } else {
-      singleNotice.style.display = "none";
-    }
-  }
-
-  // Reset UI
-  const isSuspectMode = targetCatId === "quien_es_mas_probable";
-  const yesNoControls = document.getElementById("secretos-yes-no-controls");
-  const suspectsControls = document.getElementById("secretos-suspects-controls");
-
-  document.getElementById("secretos-voting-controls").style.display = "block";
-  document.getElementById("secretos-voted-status").style.display = "none";
-  document.getElementById("secretos-results-box").style.display = "none";
-
-  if (isSuspectMode) {
-    if (yesNoControls) yesNoControls.style.display = "none";
-    if (suspectsControls) suspectsControls.style.display = "block";
-    renderSuspectsVotingButtons();
-  } else {
-    if (yesNoControls) yesNoControls.style.display = "grid";
-    if (suspectsControls) suspectsControls.style.display = "none";
-  }
-
-  // TV mode sync if TV is open
-  const tvHeadline = document.getElementById("tv-main-headline");
-  if (tvHeadline) {
-    const headlinePrefix = isSuspectMode ? "👑 ¿Quién es Más Probable Que...?" : "🔥 Declaración Íntima:";
-    tvHeadline.innerHTML = `
-      <div style="font-size:22px; color:var(--coral); text-transform:uppercase; margin-bottom:12px; font-weight:800;">${headlinePrefix}</div>
-      "${escapeHtml(currentStatement)}"
-    `;
-  }
-
-  listenToSecretosVotes(secretosRoundIndex);
+// ---------- Iniciar dinámica (anfitrión) ----------
+function gameResetFields() {
+  return {
+    phase: null, round: 0, pos: 0, deck: [], order: [], current: null,
+    speaker: null, currentAuthor: null, realIdx: null, category: null,
+  };
 }
 
-function renderSuspectsVotingButtons() {
-  const grid = document.getElementById("secretos-suspects-grid");
-  if (!grid) return;
-  grid.innerHTML = "";
-
-  const players = currentRoomPlayers.length > 0 ? currentRoomPlayers : [
-    { id: currentSession.playerId, name: currentSession.playerName || "Tú", avatar: currentSession.playerAvatar || "👤" },
-    { id: "p_demo1", name: "Valentina", avatar: "🐱" },
-    { id: "p_demo2", name: "Nicolás", avatar: "🐺" }
-  ];
-
-  players.forEach((p) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "voting-option-btn";
-    btn.innerHTML = `<span style="font-size:24px;">${p.avatar || "👤"}</span> <strong>${escapeHtml(p.name)}</strong>`;
-    btn.addEventListener("click", () => {
-      recordSecretosSuspectVote(p.id, p.name);
-    });
-    grid.appendChild(btn);
-  });
+function pickSpeaker(players, exceptId) {
+  const pool = activePlayers(players).filter((p) => p.id !== exceptId);
+  const pick = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+  return pick ? { id: pick.id, name: pick.name, avatar: pick.avatar || "👤" } : null;
 }
 
-function recordSecretosSuspectVote(suspectId, suspectName) {
-  document.getElementById("secretos-voting-controls").style.display = "none";
-  document.getElementById("secretos-voted-status").style.display = "block";
-
-  const voteData = {
-    playerId: currentSession.playerId,
-    name: currentSession.playerName,
-    gender: currentSession.playerGender || "hombre",
-    suspectId: suspectId,
-    suspectName: suspectName,
-    createdAt: Date.now(),
+$("btn-start-dynamic").addEventListener("click", async () => {
+  const w = roomWatcher;
+  if (!w || !isHost()) return;
+  const dyn = getDynamic(selectedDynamicKey);
+  const fields = {
+    ...gameResetFields(),
+    state: "playing",
+    mode: dyn.mode,
+    dynamicKey: dyn.key,
+    gameId: randomId(6),
+    settings: {
+      revealAuthor: $("chk-reveal-truth").checked,
+      revealGender: $("chk-reveal-gender").checked,
+    },
   };
 
-  secretosCurrentVotes[currentSession.playerId] = voteData;
-
-  if (firestoreAvailable && db && currentSession.currentRoomId) {
-    setDoc(
-      doc(db, "salas", currentSession.currentRoomId, `secretos_v_${secretosRoundIndex}`, currentSession.playerId),
-      voteData
-    ).catch(console.error);
-  }
-
-  showToast(`Votaste por: ${suspectName}`, "👉");
-  renderSecretosTally();
-}
-
-function listenToSecretosVotes(roundIdx) {
-  if (!firestoreAvailable || !db || !currentSession.currentRoomId) return;
-
-  const votesCol = collection(db, "salas", currentSession.currentRoomId, `secretos_v_${roundIdx}`);
-  if (currentSession.unsubscribeSecretos) currentSession.unsubscribeSecretos();
-
-  currentSession.unsubscribeSecretos = onSnapshot(votesCol, (snap) => {
-    secretosCurrentVotes = {};
-    snap.forEach((d) => {
-      secretosCurrentVotes[d.id] = d.data();
-    });
-    renderSecretosTally();
-  });
-}
-
-function recordSecretosVote(voteBool) {
-  document.getElementById("secretos-voting-controls").style.display = "none";
-  document.getElementById("secretos-voted-status").style.display = "block";
-
-  const voteData = {
-    playerId: currentSession.playerId,
-    name: currentSession.playerName,
-    gender: currentSession.playerGender || "hombre",
-    vote: voteBool,
-    createdAt: Date.now(),
-  };
-
-  secretosCurrentVotes[currentSession.playerId] = voteData;
-
-  if (firestoreAvailable && db && currentSession.currentRoomId) {
-    setDoc(
-      doc(db, "salas", currentSession.currentRoomId, `secretos_v_${secretosRoundIndex}`, currentSession.playerId),
-      voteData
-    ).catch(console.error);
-  }
-
-  showToast(voteBool ? "Votaste: SÍ" : "Votaste: NO", voteBool ? "✅" : "❌");
-  renderSecretosTally();
-}
-
-function renderSecretosTally() {
-  const votes = Object.values(secretosCurrentVotes);
-  if (votes.length === 0) return;
-
-  document.getElementById("secretos-results-box").style.display = "block";
-
-  const isSuspectMode = currentSession.selectedRoomCategory === "quien_es_mas_probable";
-  const suspectsResultsContainer = document.getElementById("secretos-suspects-results-container");
-  const yesNoResultsSummary = document.getElementById("secretos-yes-no-results-summary");
-  const genderBreakdownList = document.getElementById("secretos-gender-breakdown-list");
-
-  if (isSuspectMode) {
-    if (suspectsResultsContainer) suspectsResultsContainer.style.display = "block";
-    if (yesNoResultsSummary) yesNoResultsSummary.style.display = "none";
-    if (genderBreakdownList) genderBreakdownList.style.display = "none";
-
-    const tally = {};
-    votes.forEach((v) => {
-      if (v.suspectId) {
-        if (!tally[v.suspectId]) {
-          tally[v.suspectId] = {
-            name: v.suspectName || "Participante",
-            count: 0,
-          };
-        }
-        tally[v.suspectId].count++;
-      }
-    });
-
-    const sortedSuspects = Object.values(tally).sort((a, b) => b.count - a.count);
-    const barsList = document.getElementById("secretos-suspects-bars-list");
-    if (barsList) {
-      barsList.innerHTML = sortedSuspects.map((item, idx) => {
-        const pct = Math.round((item.count / votes.length) * 100);
-        const isTop = idx === 0 && item.count > 0;
-        return `
-          <div class="result-bar-item" style="padding: 12px 14px; margin-bottom: 8px; border-left: 4px solid ${isTop ? 'var(--coral)' : 'var(--purple)'};">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 800; font-size: 14.5px;">
-                ${isTop ? '👑 ' : ''}${escapeHtml(item.name)}
-              </span>
-              <span style="font-weight: 800; color: ${isTop ? 'var(--coral)' : 'var(--cyan)'};">
-                ${item.count} ${item.count === 1 ? 'voto' : 'votos'} (${pct}%)
-              </span>
-            </div>
-            <div style="background: rgba(255, 255, 255, 0.08); height: 8px; border-radius: 4px; overflow: hidden;">
-              <div style="background: ${isTop ? 'var(--coral)' : 'var(--purple)'}; height: 100%; width: ${pct}%; transition: width 0.8s ease;"></div>
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    if (sortedSuspects.length > 0) {
-      const winner = sortedSuspects[0];
-      document.getElementById("lbl-secretos-intrigue-text").textContent =
-        `👑 ¡${winner.name} fue elegido/a como el más probable con ${winner.count} ${winner.count === 1 ? 'voto' : 'votos'} (${Math.round((winner.count / votes.length) * 100)}%)! 👀`;
-    }
-    return;
-  }
-
-  // Si no es suspect mode, mostrar resultados Yes/No
-  if (suspectsResultsContainer) suspectsResultsContainer.style.display = "none";
-  if (yesNoResultsSummary) yesNoResultsSummary.style.display = "grid";
-
-  let totalYes = 0;
-  let totalNo = 0;
-
-  let hombresTotal = 0;
-  let hombresYes = 0;
-
-  let mujeresTotal = 0;
-  let mujeresYes = 0;
-
-  let otrosTotal = 0;
-  let otrosYes = 0;
-
-  votes.forEach((v) => {
-    if (v.vote) totalYes++;
-    else totalNo++;
-
-    const g = (v.gender || "hombre").toLowerCase();
-    if (g === "hombre") {
-      hombresTotal++;
-      if (v.vote) hombresYes++;
-    } else if (g === "mujer") {
-      mujeresTotal++;
-      if (v.vote) mujeresYes++;
-    } else {
-      otrosTotal++;
-      if (v.vote) otrosYes++;
-    }
-  });
-
-  document.getElementById("lbl-secretos-total-yes").textContent = totalYes;
-  document.getElementById("lbl-secretos-total-no").textContent = totalNo;
-
-  const revealGender = currentSession.revealGender !== false;
-  const breakdownContainer = document.getElementById("secretos-gender-breakdown-list");
-  if (breakdownContainer) {
-    breakdownContainer.style.display = revealGender ? "flex" : "none";
-  }
-
-  if (revealGender) {
-    // Hombres stats
-    const pctH = hombresTotal > 0 ? Math.round((hombresYes / hombresTotal) * 100) : 0;
-    document.getElementById("lbl-secretos-hombres-stats").textContent = `${hombresYes} de ${hombresTotal} dijeron Sí (${pctH}%)`;
-    document.getElementById("bar-secretos-hombres").style.width = `${pctH}%`;
-
-    // Mujeres stats
-    const pctM = mujeresTotal > 0 ? Math.round((mujeresYes / mujeresTotal) * 100) : 0;
-    document.getElementById("lbl-secretos-mujeres-stats").textContent = `${mujeresYes} de ${mujeresTotal} dijeron Sí (${pctM}%)`;
-    document.getElementById("bar-secretos-mujeres").style.width = `${pctM}%`;
-
-    // Otros stats
-    const rowOtros = document.getElementById("row-secretos-otros");
-    if (otrosTotal > 0) {
-      rowOtros.style.display = "block";
-      const pctO = Math.round((otrosYes / otrosTotal) * 100);
-      document.getElementById("lbl-secretos-otros-stats").textContent = `${otrosYes} de ${otrosTotal} dijeron Sí (${pctO}%)`;
-      document.getElementById("bar-secretos-otros").style.width = `${pctO}%`;
-    } else {
-      rowOtros.style.display = "none";
-    }
-  }
-
-  // Generar mensaje de intriga divertido / picante
-  let intrigueMsg = "";
-  if (revealGender) {
-    if (hombresYes > 0 && hombresYes < hombresTotal) {
-      intrigueMsg = `¡${hombresYes} de los ${hombresTotal} hombres en el grupo confesó haberlo hecho! ¿Quién de ellos habrá sido? 👀`;
-    } else if (mujeresYes > 0 && mujeresYes < mujeresTotal) {
-      intrigueMsg = `¡${mujeresYes} de las ${mujeresTotal} mujeres en el grupo confesó haberlo hecho! ¿Quién de ellas fue? 🤫`;
-    } else if (totalYes === votes.length) {
-      intrigueMsg = `¡El 100% del grupo respondió que SÍ! Nadie aquí es un santo 😂`;
-    } else if (totalYes === 0) {
-      intrigueMsg = `Todos dijeron que NO... ¿Son todos unos santos o nadie se atrevió a confesar? 🤔`;
-    } else if (totalYes === 1) {
-      intrigueMsg = `¡Solo 1 persona en todo el grupo se atrevió a admitirlo! ¿Quién será el/la valiente? 🔥`;
-    } else {
-      intrigueMsg = `¡${totalYes} personas en la sala dijeron que SÍ! Hay secretos guardados en el grupo... 🤐`;
-    }
+  if (dyn.mode === "preguntas") {
+    fields.category = dyn.category;
+    fields.deck = shuffleArray(getCategory(dyn.category).preguntas);
+    fields.phase = "vote";
+    fields.speaker = pickSpeaker(w.players);
+  } else if (dyn.mode === "duo") {
+    fields.deck = shuffleArray([...getCategory("citas_nivel1").preguntas, ...getCategory("dilemas_absurdos").preguntas]);
+    fields.phase = "answer";
+  } else if (dyn.mode === "muro") {
+    fields.phase = "wall";
   } else {
-    // Desglose por sexo desactivado (Modo 100% neutro)
-    if (totalYes === votes.length) {
-      intrigueMsg = `¡El 100% de la sala confesó que SÍ! (Desglose por sexo oculto) 🎉`;
-    } else if (totalYes === 0) {
-      intrigueMsg = `¡El 100% del grupo respondió que NO! 😇`;
-    } else {
-      const pct = Math.round((totalYes / votes.length) * 100);
-      intrigueMsg = `¡${totalYes} de ${votes.length} personas (${pct}%) respondieron que SÍ! (Desglose por sexo desactivado) 🤫`;
-    }
+    fields.phase = "write";
   }
 
-  document.getElementById("lbl-secretos-intrigue-text").textContent = intrigueMsg;
-}
-
-document.getElementById("btn-secreto-vote-yes")?.addEventListener("click", () => recordSecretosVote(true));
-document.getElementById("btn-secreto-vote-no")?.addEventListener("click", () => recordSecretosVote(false));
-
-document.getElementById("btn-next-secreto")?.addEventListener("click", async () => {
-  secretosRoundIndex++;
-  secretosCurrentVotes = {};
-
-  if (firestoreAvailable && db && currentSession.currentRoomId) {
-    try {
-      await updateDoc(doc(db, "salas", currentSession.currentRoomId), {
-        secretosRoundIndex: secretosRoundIndex,
-      });
-    } catch (e) {
-      console.error(e);
-    }
+  try {
+    await updateDoc(roomRef(w.code), fields);
+  } catch (err) {
+    showToast("No se pudo empezar: " + friendlyError(err), "❌");
   }
-
-  setupSecretosPhase(null, { secretosRoundIndex, secretosDeck: currentRoomSecretosDeck });
-  const isProbable = currentSession.selectedRoomCategory === "quien_es_mas_probable";
-  showToast(isProbable ? "Siguiente ronda: ¿Quién es más probable?..." : "Siguiente declaración íntima al azar...", "🎲");
 });
 
-document.getElementById("btn-leave-secretos")?.addEventListener("click", () => switchView("view-lobby"));
-
 // ==========================================
-// 5. DINÁMICA: CONFESIONES SECRETAS
+// 5. MOTOR DE DINÁMICAS EN SALA
 // ==========================================
-let currentRoomConfessions = [];
+function hostUpdate(fields) {
+  if (!roomWatcher || !isHost()) return Promise.resolve();
+  return updateDoc(roomRef(roomWatcher.code), fields).catch((err) => showToast(friendlyError(err), "⚠️"));
+}
 
-function setupConfesionesPhase(state, roomData) {
-  const stepWrite = document.getElementById("confesion-step-write");
-  const stepVote = document.getElementById("confesion-step-vote");
-  const stepResults = document.getElementById("confesion-step-results");
+function voteStorageKey(room) {
+  return `rh_v_${roomWatcher.code}_${room.gameId}_${room.round}`;
+}
 
-  stepWrite.style.display = "none";
-  stepVote.style.display = "none";
-  stepResults.style.display = "none";
+function getMyVote(room) {
+  try { return JSON.parse(load("session", voteStorageKey(room)) || "null"); } catch { return null; }
+}
 
-  if (state === "writing" || !state) {
-    stepWrite.style.display = "block";
-
-    // Actualizar aviso según configuración de la sala
-    const privacyBadge = document.getElementById("confesion-privacy-notice-badge");
-    const privacyIcon = document.getElementById("lbl-confesion-privacy-icon");
-    const privacyText = document.getElementById("lbl-confesion-privacy-text");
-    const willReveal = roomData?.revealAuthor !== false;
-
-    if (privacyBadge && privacyText) {
-      if (willReveal) {
-        privacyBadge.style.background = "rgba(245, 158, 11, 0.15)";
-        privacyBadge.style.borderColor = "rgba(245, 158, 11, 0.5)";
-        if (privacyIcon) privacyIcon.textContent = "👀";
-        privacyText.style.color = "#fde68a";
-        privacyText.textContent = "Atención: En esta confesión los nombres de los que confiesan SERÁN REVELADOS al final de la votación.";
-      } else {
-        privacyBadge.style.background = "rgba(16, 185, 129, 0.15)";
-        privacyBadge.style.borderColor = "rgba(16, 185, 129, 0.5)";
-        if (privacyIcon) privacyIcon.textContent = "🛡️";
-        privacyText.style.color = "#a7f3d0";
-        privacyText.textContent = "Garantía 100% Anónima: Tu nombre JAMÁS será revelado. Solo se verán las votaciones y sospechas.";
-      }
-    }
-
-    listenToConfessionsSubmissions();
-  } else if (state === "voting") {
-    stepVote.style.display = "block";
-    renderConfessionVotingRound(roomData);
-  } else if (state === "results") {
-    stepResults.style.display = "block";
-    renderConfessionResults(roomData);
+// El voto se guarda con un id aleatorio y sin nombre: nadie puede saber qué votó cada persona
+async function castVote(value, label, extra = {}) {
+  const w = roomWatcher;
+  const room = w?.room;
+  if (!room || getMyVote(room)) return;
+  const token = randomId(16);
+  store("session", voteStorageKey(room), JSON.stringify({ value, label }));
+  renderGame(w);
+  try {
+    await setDoc(doc(db, "salas", w.code, `v_${room.gameId}_${room.round}`, token), { value, ...extra });
+  } catch (err) {
+    unstore("session", voteStorageKey(room));
+    renderGame(w);
+    showToast("No se pudo registrar tu voto: " + friendlyError(err), "❌");
   }
 }
 
-// Enviar confesión
-document.getElementById("btn-submit-confession")?.addEventListener("click", async () => {
-  const textarea = document.getElementById("txt-player-confession");
-  const texto = textarea.value.trim();
-  if (!texto) {
+function questionTypeLabel(info) {
+  return {
+    suspect: "👉 Voten por alguien",
+    choice: "🅰️/🅱️ Elijan una opción",
+    yesno: "🙋 Sí o no, en secreto",
+    open: "🎤 Ronda de respuesta",
+  }[info.type];
+}
+
+function barRow(label, count, total, { highlight = false, color = "var(--purple)" } = {}) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+  return `
+    <div class="result-row ${highlight ? "is-top" : ""}">
+      <div class="result-row-head">
+        <span>${label}</span>
+        <strong>${count} ${count === 1 ? "voto" : "votos"} · ${pct}%</strong>
+      </div>
+      <div class="result-track"><div class="result-fill" style="width:${pct}%; background:${color}"></div></div>
+    </div>`;
+}
+
+function suspectResultsHtml(votes, players) {
+  const tally = new Map();
+  votes.forEach((v) => {
+    const player = players.find((p) => p.id === v.value);
+    const name = player ? `${player.avatar || "👤"} ${escapeHtml(player.name)}` : escapeHtml(v.name || "Alguien");
+    const entry = tally.get(v.value) || { name, count: 0 };
+    entry.count++;
+    tally.set(v.value, entry);
+  });
+  const sorted = [...tally.values()].sort((a, b) => b.count - a.count);
+  if (sorted.length === 0) return "";
+  const tie = sorted.length > 1 && sorted[0].count === sorted[1].count;
+  const headline = tie ? "🤝 ¡Empate en el primer lugar!" : `👑 ${sorted[0].name} ganó la votación`;
+  return `
+    <div class="results-headline">${headline}</div>
+    <div class="results-bars-list">
+      ${sorted.map((s, i) => barRow(s.name, s.count, votes.length, { highlight: i === 0 && !tie, color: i === 0 ? "var(--coral)" : "var(--purple)" })).join("")}
+    </div>`;
+}
+
+function choiceResultsHtml(votes, options) {
+  const counts = [0, 1].map((i) => votes.filter((v) => v.value === i).length);
+  const total = votes.length;
+  const winner = counts[0] === counts[1] ? -1 : counts[0] > counts[1] ? 0 : 1;
+  const headline = winner === -1 ? "🤝 ¡Empate total!" : `🏆 Ganó: ${escapeHtml(options[winner])}`;
+  return `
+    <div class="results-headline">${headline}</div>
+    <div class="results-bars-list">
+      ${options.map((opt, i) => barRow(`${i === 0 ? "🅰️" : "🅱️"} ${escapeHtml(opt)}`, counts[i], total, { highlight: i === winner, color: i === 0 ? "var(--cyan)" : "var(--pink)" })).join("")}
+    </div>`;
+}
+
+function yesNoResultsHtml(votes, info, revealGender) {
+  const yes = votes.filter((v) => v.value === "yes").length;
+  const no = votes.length - yes;
+  let html = `
+    <div class="stat-pair">
+      <div class="stat-box yes"><span class="stat-num">${yes}</span><span>${info.labels[0]}</span></div>
+      <div class="stat-box no"><span class="stat-num">${no}</span><span>${info.labels[1]}</span></div>
+    </div>`;
+
+  if (revealGender) {
+    const groups = [
+      { key: "hombre", label: "👨 Hombres", color: "var(--cyan)" },
+      { key: "mujer", label: "👩 Mujeres", color: "var(--pink)" },
+      { key: "otro", label: "🌈 Otros", color: "var(--purple)" },
+    ];
+    const rows = groups
+      .map((g) => {
+        const group = votes.filter((v) => v.gender === g.key);
+        if (group.length === 0) return "";
+        const groupYes = group.filter((v) => v.value === "yes").length;
+        const pct = Math.round((groupYes / group.length) * 100);
+        return `
+          <div class="result-row">
+            <div class="result-row-head"><span>${g.label}</span><strong>${groupYes} de ${group.length} dijeron sí</strong></div>
+            <div class="result-track"><div class="result-fill" style="width:${pct}%; background:${g.color}"></div></div>
+          </div>`;
+      })
+      .join("");
+    if (rows) html += `<div class="results-bars-list">${rows}</div>`;
+  }
+
+  let intrigue;
+  if (yes === 0) intrigue = "Todos dijeron que no... ¿santos o nadie se atrevió? 😇";
+  else if (yes === votes.length) intrigue = "¡El 100% dijo que sí! Nadie aquí es inocente 😂";
+  else if (yes === 1) intrigue = "Solo 1 persona lo admitió. ¿Quién será? 👀";
+  else intrigue = `${yes} de ${votes.length} personas dijeron que sí 🤫`;
+  return html + `<div class="results-headline subtle">${intrigue}</div>`;
+}
+
+function voteButtonsHtml(buttons) {
+  return `<div class="voting-options-grid">${buttons
+    .map((b) => `<button type="button" class="vote-btn ${b.cls || ""}" data-vote="${escapeAttr(JSON.stringify(b.value))}" data-label="${escapeAttr(b.label)}">${b.html}</button>`)
+    .join("")}</div>`;
+}
+
+function votedHtml(myVote) {
+  return `<div class="voted-status">✓ Tu voto: <strong>${escapeHtml(myVote.label)}</strong></div>`;
+}
+
+function hostButtons(buttons) {
+  return buttons.map((b) => `<button type="button" class="btn ${b.cls || "btn-primary"}" data-host="${b.action}" ${b.disabled ? "disabled" : ""}>${b.label}</button>`).join("");
+}
+
+function nonHostNote(text) {
+  return `<p class="muted-small center">${text}</p>`;
+}
+
+// ---------- Render principal ----------
+function renderGame(w) {
+  const room = w.room;
+  if (!room || room.state !== "playing") return;
+  const dyn = getDynamic(room.dynamicKey);
+  $("game-mode-pill").textContent = `${dyn.icon} ${dyn.title}`;
+  $("btn-game-back").textContent = isHost() ? "← Terminar" : "← Salir";
+
+  const renderers = { preguntas: renderPreguntas, confesiones: renderConfesiones, tres: renderTres, duo: renderDuo, muro: renderMuro };
+  renderers[room.mode]?.(w);
+}
+
+// Reconstruye el panel solo cuando cambia la fase o la ronda, así no se borra lo que alguien está escribiendo
+function ensurePanel(key, html) {
+  if (key === lastPanelKey) return false;
+  lastPanelKey = key;
+  $("game-panel").innerHTML = html;
+  return true;
+}
+
+// ---------- Preguntas en grupo (votos / ronda de respuesta) ----------
+function renderPreguntas(w) {
+  const room = w.room;
+  const question = room.deck[room.pos] || "";
+  const info = classifyGroupQuestion(question, room.category);
+  const cat = getCategory(room.category);
+  const players = activePlayers(w.players);
+  const revealGender = !!room.settings?.revealGender;
+
+  $("game-status").textContent = `${cat?.titulo || ""} · Pregunta ${room.pos + 1} de ${room.deck.length}`;
+
+  let privacy = "";
+  if (info.type === "yesno") privacy = revealGender ? "🛡️ Voto anónimo. Se muestra el total y el desglose por género." : "🛡️ Voto anónimo. Solo se muestra el total del grupo.";
+  else if (info.type === "suspect") privacy = "🛡️ Voto secreto: nadie ve por quién votaste.";
+  else if (info.type === "choice") privacy = "🛡️ Voto secreto: solo se ven los porcentajes.";
+
+  const singleWarning = info.type === "yesno" && revealGender ? singleGenderWarning(players) : "";
+
+  ensurePanel(
+    `preguntas|${room.gameId}|${room.round}|${room.pos}`,
+    `
+    <div class="question-hero">
+      <span class="type-badge">${questionTypeLabel(info)}</span>
+      <p class="question-hero-text">${escapeHtml(question)}</p>
+    </div>
+    ${privacy ? `<div class="notice notice-safe">${privacy}</div>` : ""}
+    ${singleWarning ? `<div class="notice notice-warn">⚠️ ${singleWarning}</div>` : ""}
+    <div id="g-vote-area"></div>
+    <div class="progress-line" id="g-progress"></div>
+    <div id="g-results"></div>`
+  );
+
+  const host = isHost();
+  if (info.type === "open") {
+    const sp = room.speaker;
+    const isMe = sp?.id === profile.playerId;
+    $("g-vote-area").innerHTML = sp
+      ? `<div class="speaker-card ${isMe ? "is-me" : ""}">
+           <span class="eyebrow">Le toca responder a</span>
+           <div class="speaker-name">${sp.avatar} ${escapeHtml(sp.name)}</div>
+           ${isMe ? "<p>🎤 ¡Te toca! Responde en voz alta.</p>" : "<p>Después, cualquiera puede opinar.</p>"}
+         </div>`
+      : `<div class="speaker-card"><p>Respondan en voz alta, uno por uno.</p></div>`;
+    $("g-progress").textContent = "";
+    $("g-results").innerHTML = "";
+    $("game-host-bar").innerHTML = host
+      ? hostButtons([
+          { action: "reroll-speaker", label: "🎲 Otra persona", cls: "btn-secondary" },
+          { action: "next-question", label: "Siguiente pregunta ➔" },
+        ])
+      : nonHostNote("El anfitrión pasa a la siguiente pregunta.");
+    return;
+  }
+
+  const myVote = getMyVote(room);
+  const votes = w.votes;
+  const showResults = room.phase === "results" || (players.length > 0 && votes.length >= players.length);
+
+  if (myVote) {
+    $("g-vote-area").innerHTML = votedHtml(myVote);
+  } else if (!showResults) {
+    let buttons;
+    if (info.type === "yesno") {
+      buttons = [
+        { value: "yes", label: info.labels[0], html: info.labels[0], cls: "big yes" },
+        { value: "no", label: info.labels[1], html: info.labels[1], cls: "big no" },
+      ];
+    } else if (info.type === "choice") {
+      buttons = info.options.map((opt, i) => ({ value: i, label: opt, html: `<span class="opt-letter">${i === 0 ? "A" : "B"}</span> ${escapeHtml(opt)}`, cls: "option" }));
+    } else {
+      buttons = players.map((p) => ({ value: p.id, label: p.name, html: `<span class="vote-avatar">${p.avatar || "👤"}</span> ${escapeHtml(p.name)}` }));
+    }
+    $("g-vote-area").innerHTML = voteButtonsHtml(buttons);
+  } else {
+    $("g-vote-area").innerHTML = "";
+  }
+
+  $("g-progress").textContent = `🗳️ ${votes.length} de ${players.length} votaron`;
+
+  if (showResults && votes.length > 0) {
+    let html;
+    if (info.type === "suspect") html = suspectResultsHtml(votes, w.players);
+    else if (info.type === "choice") html = choiceResultsHtml(votes, info.options);
+    else html = yesNoResultsHtml(votes, info, revealGender);
+    $("g-results").innerHTML = `<div class="results-box">${html}</div>`;
+  } else {
+    $("g-results").innerHTML = showResults ? `<p class="muted-small center">Nadie votó en esta ronda.</p>` : "";
+  }
+
+  $("game-host-bar").innerHTML = host
+    ? hostButtons([
+        ...(showResults ? [] : [{ action: "show-results", label: "📊 Mostrar resultados", cls: "btn-secondary" }]),
+        { action: "next-question", label: "Siguiente pregunta ➔" },
+      ])
+    : nonHostNote(showResults ? "Esperando la siguiente pregunta..." : "Los resultados aparecen cuando todos voten.");
+}
+
+function handleVoteClick(btn) {
+  const room = roomWatcher?.room;
+  if (!room) return;
+  const value = JSON.parse(btn.dataset.vote);
+  const label = btn.dataset.label;
+  const extra = {};
+  if (room.mode === "preguntas") {
+    const info = classifyGroupQuestion(room.deck[room.pos], room.category);
+    if (info.type === "yesno" && room.settings?.revealGender) extra.gender = profile.gender;
+    if (info.type === "suspect") extra.name = label;
+  }
+  if (room.mode === "confesiones") extra.name = label;
+  castVote(value, label, extra);
+}
+
+// ---------- Confesiones anónimas ----------
+function submissionKey(room) {
+  return `rh_s_${roomWatcher.code}_${room.gameId}`;
+}
+
+function renderConfesiones(w) {
+  const room = w.room;
+  const players = activePlayers(w.players);
+  const host = isHost();
+  const reveal = room.settings?.revealAuthor !== false;
+
+  if (room.phase === "write") {
+    $("game-status").textContent = "Paso 1 · Escribe tu confesión";
+    const submitted = !!load("session", submissionKey(room));
+    ensurePanel(
+      `conf|${room.gameId}|write|${submitted}`,
+      `
+      <div class="room-box inner">
+        <h3 class="panel-title">Escribe tu confesión 🤫</h3>
+        <div class="notice ${reveal ? "notice-warn" : "notice-safe"}">
+          ${reveal ? "👀 Al final de cada votación se revelará quién la escribió." : "🛡️ 100% anónima: tu nombre no se guarda en ningún lado."}
+        </div>
+        ${submitted
+          ? `<div class="voted-status">✓ Tu confesión está guardada</div>`
+          : `<p class="panel-desc">Algo vergonzoso, una anécdota loca o algo que nadie del grupo sepa.</p>
+             <textarea id="txt-player-confession" class="input-field" rows="4" maxlength="200" placeholder="Ej: Una vez me quedé dormido en una fiesta y desperté en otra..."></textarea>
+             <button type="button" class="btn btn-purple btn-block" data-action="submit-confession">🔒 Enviar en secreto</button>`}
+        <div class="progress-line" id="g-progress"></div>
+      </div>`
+    );
+    $("g-progress").textContent = `✍️ ${w.subs.length} de ${players.length} ya enviaron`;
+    $("game-host-bar").innerHTML = host
+      ? hostButtons([{ action: "conf-start-vote", label: `🗳️ Empezar votación (${w.subs.length})`, disabled: w.subs.length === 0 }])
+      : nonHostNote("Cuando todos envíen, el anfitrión empieza la votación.");
+    return;
+  }
+
+  if (room.phase === "end") {
+    renderEndPanel(w, "¡Se acabaron las confesiones!", "conf-restart");
+    return;
+  }
+
+  // Fases vote / results
+  $("game-status").textContent = `Confesión ${room.pos + 1} de ${room.order.length}`;
+  ensurePanel(
+    `conf|${room.gameId}|${room.round}|${room.phase}`,
+    `
+    <div class="question-hero purple">
+      <span class="type-badge">¿De quién es esta confesión?</span>
+      <p class="question-hero-text">"${escapeHtml(room.current?.text || "")}"</p>
+    </div>
+    <div id="g-vote-area"></div>
+    <div class="progress-line" id="g-progress"></div>
+    <div id="g-results"></div>`
+  );
+
+  const votes = w.votes;
+  const myVote = getMyVote(room);
+  const showResults = room.phase === "results" || (players.length > 0 && votes.length >= players.length);
+
+  if (myVote) $("g-vote-area").innerHTML = votedHtml(myVote);
+  else if (!showResults)
+    $("g-vote-area").innerHTML = voteButtonsHtml(
+      players.map((p) => ({ value: p.id, label: p.name, html: `<span class="vote-avatar">${p.avatar || "👤"}</span> ${escapeHtml(p.name)}` }))
+    );
+  else $("g-vote-area").innerHTML = "";
+
+  $("g-progress").textContent = `🗳️ ${votes.length} de ${players.length} votaron`;
+  let results = showResults && votes.length ? `<div class="results-box">${suspectResultsHtml(votes, w.players)}</div>` : "";
+  if (room.currentAuthor) {
+    results += `<div class="author-reveal"><span class="eyebrow">💥 La confesión era de</span><div class="speaker-name">${escapeHtml(room.currentAuthor)}</div></div>`;
+  }
+  $("g-results").innerHTML = results;
+
+  const isLast = room.pos + 1 >= room.order.length;
+  $("game-host-bar").innerHTML = host
+    ? hostButtons([
+        ...(!showResults ? [{ action: "show-results", label: "📊 Mostrar resultados", cls: "btn-secondary" }] : []),
+        ...(showResults && reveal && !room.currentAuthor ? [{ action: "conf-reveal", label: "👀 Revelar autor", cls: "btn-purple" }] : []),
+        { action: "conf-next", label: isLast ? "Terminar ronda ➔" : "Siguiente confesión ➔" },
+      ])
+    : nonHostNote(showResults ? "Esperando al anfitrión..." : "Los resultados aparecen cuando todos voten.");
+}
+
+async function submitConfession() {
+  const w = roomWatcher;
+  const room = w.room;
+  const text = $("txt-player-confession")?.value.trim();
+  if (!text) {
     showToast("Escribe algo antes de enviar", "✍️");
     return;
   }
-
-  document.getElementById("btn-submit-confession").disabled = true;
-  document.getElementById("confession-submitted-wait").style.display = "block";
-
-  if (firestoreAvailable && db && currentSession.currentRoomId) {
-    try {
-      await setDoc(doc(db, "salas", currentSession.currentRoomId, "confesiones", currentSession.playerId), {
-        playerId: currentSession.playerId,
-        authorName: currentSession.playerName,
-        text: texto,
-        createdAt: serverTimestamp(),
-      });
-      showToast("¡Confesión guardada!", "🔒");
-    } catch (e) {
-      console.error(e);
-    }
-  } else {
-    showToast("¡Confesión enviada en modo secreto!", "🔒");
-    setTimeout(() => {
-      // Simulación offline si no hay backend
-      document.getElementById("confesion-step-write").style.display = "none";
-      document.getElementById("confesion-step-vote").style.display = "block";
-      document.getElementById("lbl-current-confession-text").textContent = `"${texto}"`;
-      renderSuspectButtons([
-        { id: "p1", name: currentSession.playerName || "Tú", avatar: currentSession.playerAvatar },
-        { id: "p2", name: "Sofi", avatar: "🦄" },
-        { id: "p3", name: "Diego", avatar: "⚡" },
-      ]);
-    }, 1500);
+  const reveal = room.settings?.revealAuthor !== false;
+  // En modo anónimo el documento no guarda nombre y su id es aleatorio
+  const docId = reveal ? profile.playerId : randomId(16);
+  const data = reveal ? { text, authorId: profile.playerId, authorName: profile.name } : { text };
+  try {
+    await setDoc(doc(db, "salas", w.code, `s_${room.gameId}`, docId), data);
+    store("session", submissionKey(room), "1");
+    renderGame(w);
+    showToast("Confesión enviada", "🔒");
+  } catch (err) {
+    showToast("No se pudo enviar: " + friendlyError(err), "❌");
   }
-});
-
-function listenToConfessionsSubmissions() {
-  if (!firestoreAvailable || !db || !currentSession.currentRoomId) return;
-
-  const confCol = collection(db, "salas", currentSession.currentRoomId, "confesiones");
-  onSnapshot(confCol, async (snap) => {
-    currentRoomConfessions = [];
-    snap.forEach((d) => currentRoomConfessions.push({ id: d.id, ...d.data() }));
-
-    // Si el Host ve que hay confesiones, puede avanzar a votación
-    if (currentSession.isHost && currentRoomConfessions.length >= 1) {
-      const waitDiv = document.getElementById("confession-submitted-wait");
-      if (waitDiv) {
-        waitDiv.innerHTML = `
-          <div style="margin-top:10px;">
-            <strong>${currentRoomConfessions.length} confesiones recibidas.</strong>
-            <br>
-            <button type="button" class="btn btn-primary" id="btn-host-advance-voting" style="margin-top:10px;">
-              Comenzar Votación para Todos ➔
-            </button>
-          </div>
-        `;
-        document.getElementById("btn-host-advance-voting")?.addEventListener("click", async () => {
-          const firstConf = currentRoomConfessions[0];
-          await updateDoc(doc(db, "salas", currentSession.currentRoomId), {
-            state: "voting",
-            currentConfessionId: firstConf.id,
-            currentConfessionText: firstConf.text,
-            currentConfessionAuthor: firstConf.authorName,
-          });
-        });
-      }
-    }
-  });
 }
 
-function renderConfessionVotingRound(roomData) {
-  const confText = roomData.currentConfessionText || "Confesión secreta...";
-  document.getElementById("lbl-current-confession-text").textContent = `"${confText}"`;
-  document.getElementById("vote-submitted-feedback").style.display = "none";
+// ---------- 2 mentiras y 1 verdad ----------
+function renderTres(w) {
+  const room = w.room;
+  const players = activePlayers(w.players);
+  const host = isHost();
 
-  // Cargar lista de jugadores para votar
-  if (firestoreAvailable && db && currentSession.currentRoomId) {
-    const playersCol = collection(db, "salas", currentSession.currentRoomId, "players");
-    getDoc(playersCol).then((snap) => {
-      // Cargados en snapshot de sala
-    });
-  }
-
-  // Extraer sospechosos de la lista de jugadores de la sala
-  const playerChips = document.querySelectorAll("#room-players-list .player-chip");
-  const suspects = [];
-  playerChips.forEach((chip, i) => {
-    suspects.push({
-      id: "p_" + i,
-      name: chip.textContent.replace("👑", "").trim(),
-      avatar: "👤",
-    });
-  });
-
-  if (suspects.length === 0) {
-    suspects.push(
-      { id: "1", name: currentSession.playerName, avatar: currentSession.playerAvatar },
-      { id: "2", name: "Amigo 1", avatar: "🍕" },
-      { id: "3", name: "Amigo 2", avatar: "🚀" }
+  if (room.phase === "write") {
+    $("game-status").textContent = "Paso 1 · Escribe tus 3 afirmaciones";
+    const submitted = !!load("session", submissionKey(room));
+    const statementInput = (i, placeholder) => `
+      <div class="statement-input">
+        <label class="statement-label">
+          <span>Afirmación ${"ABC"[i]}</span>
+          <span class="real-pick"><input type="radio" name="radio-real-statement" value="${i}" ${i === 0 ? "checked" : ""}> Es la verdad</span>
+        </label>
+        <input type="text" class="input-field" id="txt-statement-${i}" maxlength="120" placeholder="${placeholder}">
+      </div>`;
+    ensurePanel(
+      `tres|${room.gameId}|write|${submitted}`,
+      `
+      <div class="room-box inner">
+        <h3 class="panel-title">2 mentiras y 1 verdad 🎭</h3>
+        <p class="panel-desc">Escribe 3 cosas sobre ti: 2 mentiras creíbles y <strong>1 verdad</strong>. Marca cuál es la verdadera.</p>
+        ${submitted
+          ? `<div class="voted-status">✓ Tus afirmaciones están guardadas</div>`
+          : `${statementInput(0, "Ej: Me rompí el brazo saltando en paracaídas")}
+             ${statementInput(1, "Ej: Fui extra en un comercial de televisión")}
+             ${statementInput(2, "Ej: Le tengo fobia a las aceitunas")}
+             <button type="button" class="btn btn-purple btn-block" data-action="submit-tres">🔒 Guardar mis afirmaciones</button>`}
+        <div class="progress-line" id="g-progress"></div>
+      </div>`
     );
+    $("g-progress").textContent = `✍️ ${w.subs.length} de ${players.length} están listos`;
+    $("game-host-bar").innerHTML = host
+      ? hostButtons([{ action: "tres-start-vote", label: `🎯 Empezar a adivinar (${w.subs.length})`, disabled: w.subs.length === 0 }])
+      : nonHostNote("Cuando todos estén listos, el anfitrión empieza.");
+    return;
   }
 
-  renderSuspectButtons(suspects);
-}
-
-function renderSuspectButtons(suspects) {
-  const grid = document.getElementById("confession-suspects-grid");
-  if (!grid) return;
-  grid.innerHTML = "";
-
-  suspects.forEach((sus) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "vote-btn";
-    btn.innerHTML = `<span>${sus.avatar || "👤"}</span> <span>${escapeHtml(sus.name)}</span>`;
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".vote-btn").forEach((b) => b.classList.remove("selected"));
-      btn.classList.add("selected");
-      document.getElementById("vote-submitted-feedback").style.display = "block";
-      showToast(`Votaste por ${sus.name}`, "🗳️");
-
-      // Si es el host, activa botón de ver resultados
-      if (currentSession.isHost) {
-        setTimeout(() => {
-          showHostResultsOption();
-        }, 1200);
-      }
-    });
-    grid.appendChild(btn);
-  });
-}
-
-function showHostResultsOption() {
-  const feedback = document.getElementById("vote-submitted-feedback");
-  if (feedback && currentSession.isHost) {
-    feedback.innerHTML = `
-      ✓ Votos recibidos.
-      <br>
-      <button type="button" class="btn btn-purple" id="btn-host-show-results" style="margin-top:10px;">
-        Ver Resultados del Grupo 📊
-      </button>
-    `;
-    document.getElementById("btn-host-show-results")?.addEventListener("click", async () => {
-      if (firestoreAvailable && db && currentSession.currentRoomId) {
-        await updateDoc(doc(db, "salas", currentSession.currentRoomId), {
-          state: "results",
-        });
-      } else {
-        document.getElementById("confesion-step-vote").style.display = "none";
-        document.getElementById("confesion-step-results").style.display = "block";
-        renderConfessionResults({
-          currentConfessionAuthor: currentSession.playerName,
-        });
-      }
-    });
+  if (room.phase === "end") {
+    renderEndPanel(w, "¡Ya jugaron todos!", "tres-restart");
+    return;
   }
+
+  const current = room.current || {};
+  const isMine = current.playerId === profile.playerId;
+  $("game-status").textContent = `Jugador ${room.pos + 1} de ${room.order.length}`;
+  ensurePanel(
+    `tres|${room.gameId}|${room.round}|${room.phase}`,
+    `
+    <div class="center">
+      <span class="eyebrow">Turno de</span>
+      <div class="speaker-name">${current.avatar || "👤"} ${escapeHtml(current.name || "")}</div>
+      <p class="panel-desc">${isMine ? "🤫 El grupo está adivinando cuál es tu verdad. ¡Pon cara de póker!" : "¿Cuál de estas 3 es la <strong>única verdad</strong>?"}</p>
+    </div>
+    <div id="g-vote-area"></div>
+    <div class="progress-line" id="g-progress"></div>
+    <div id="g-results"></div>`
+  );
+
+  const voters = players.filter((p) => p.id !== current.playerId);
+  const votes = w.votes;
+  const myVote = getMyVote(room);
+  const revealed = room.phase === "results" && room.realIdx !== null && room.realIdx !== undefined;
+  const statements = current.statements || [];
+
+  if (revealed) {
+    const correct = votes.filter((v) => v.value === room.realIdx).length;
+    $("g-vote-area").innerHTML = `<div class="statement-list">${statements
+      .map((s, i) => {
+        const count = votes.filter((v) => v.value === i).length;
+        return `<div class="statement-result ${i === room.realIdx ? "is-true" : "is-false"}">
+          <span><strong>${"ABC"[i]}:</strong> ${escapeHtml(s)}</span>
+          <span class="statement-meta">${i === room.realIdx ? "✓ VERDAD" : "✗ Mentira"} · ${count} ${count === 1 ? "voto" : "votos"}</span>
+        </div>`;
+      })
+      .join("")}</div>`;
+    $("g-results").innerHTML = `<div class="results-headline">${correct} de ${votes.length} adivinaron 🎯</div>`;
+  } else if (isMine) {
+    $("g-vote-area").innerHTML = `<div class="statement-list">${statements.map((s, i) => `<div class="statement-result"><strong>${"ABC"[i]}:</strong> ${escapeHtml(s)}</div>`).join("")}</div>`;
+    $("g-results").innerHTML = "";
+  } else if (myVote) {
+    $("g-vote-area").innerHTML = votedHtml(myVote);
+    $("g-results").innerHTML = "";
+  } else {
+    $("g-vote-area").innerHTML = voteButtonsHtml(
+      statements.map((s, i) => ({ value: i, label: `${"ABC"[i]}: ${s}`, html: `<span class="opt-letter">${"ABC"[i]}</span> ${escapeHtml(s)}`, cls: "option" }))
+    );
+    $("g-results").innerHTML = "";
+  }
+  $("g-progress").textContent = revealed ? "" : `🗳️ ${votes.length} de ${voters.length} votaron`;
+
+  const isLast = room.pos + 1 >= room.order.length;
+  $("game-host-bar").innerHTML = host
+    ? hostButtons(
+        revealed
+          ? [{ action: "tres-next", label: isLast ? "Terminar ➔" : "Siguiente jugador ➔" }]
+          : [{ action: "tres-reveal", label: "🎉 Revelar la verdad", cls: "btn-purple" }]
+      )
+    : nonHostNote(revealed ? "Esperando al siguiente jugador..." : "El anfitrión revela la verdad cuando todos voten.");
 }
 
-function renderConfessionResults(roomData) {
-  const barsContainer = document.getElementById("confession-results-bars");
-  if (!barsContainer) return;
-  barsContainer.innerHTML = "";
-
-  const mockTally = [
-    { name: currentSession.playerName, count: 5, pct: 62 },
-    { name: "Sofi", count: 2, pct: 25 },
-    { name: "Diego", count: 1, pct: 13 },
-  ];
-
-  mockTally.forEach((item) => {
-    const bar = document.createElement("div");
-    bar.className = "result-bar-item";
-    bar.innerHTML = `
-      <div class="result-bar-fill" style="width: ${item.pct}%"></div>
-      <div class="result-bar-content">
-        <span>${escapeHtml(item.name)}</span>
-        <span>${item.pct}% (${item.count} votos)</span>
-      </div>
-    `;
-    barsContainer.appendChild(bar);
-  });
-
-  const authorBox = document.getElementById("confession-real-author-box");
-  authorBox.style.display = "none";
-
-  document.getElementById("btn-host-reveal-author")?.addEventListener("click", () => {
-    authorBox.style.display = "block";
-    document.getElementById("lbl-real-author-name").textContent = roomData.currentConfessionAuthor || currentSession.playerName || "¡Carlos!";
-    showToast("¡Se ha revelado la verdad!", "💥");
-  });
-
-  document.getElementById("btn-next-confession-round")?.addEventListener("click", () => {
-    showToast("Avanzando a la siguiente ronda...", "➔");
-    document.getElementById("confesion-step-results").style.display = "none";
-    document.getElementById("confesion-step-write").style.display = "block";
-    document.getElementById("txt-player-confession").value = "";
-    document.getElementById("btn-submit-confession").disabled = false;
-    document.getElementById("confession-submitted-wait").style.display = "none";
-  });
-}
-
-// ==========================================
-// 6. DINÁMICA: LAS 3 CONFESIONES (2 MENTIRAS 1 VERDAD)
-// ==========================================
-document.getElementById("btn-submit-tres-statements")?.addEventListener("click", async () => {
-  const s0 = document.getElementById("txt-statement-0").value.trim();
-  const s1 = document.getElementById("txt-statement-1").value.trim();
-  const s2 = document.getElementById("txt-statement-2").value.trim();
-  const realIdx = parseInt(document.querySelector('input[name="radio-real-statement"]:checked')?.value || "0");
-
-  if (!s0 || !s1 || !s2) {
+async function submitTres() {
+  const w = roomWatcher;
+  const room = w.room;
+  const statements = [0, 1, 2].map((i) => $(`txt-statement-${i}`).value.trim());
+  if (statements.some((s) => !s)) {
     showToast("Completa las 3 afirmaciones", "⚠️");
     return;
   }
-
-  showToast("¡Tus 3 afirmaciones han sido guardadas!", "🎭");
-
-  // Transición a la etapa de adivinanzas
-  document.getElementById("tres-step-write").style.display = "none";
-  document.getElementById("tres-step-vote").style.display = "block";
-  document.getElementById("lbl-tres-player-name").textContent = currentSession.playerName || "Participante";
-
-  renderTresStatementsVoting([s0, s1, s2], realIdx);
-});
-
-function renderTresStatementsVoting(statements, realIndex) {
-  const list = document.getElementById("tres-statements-vote-list");
-  if (!list) return;
-  list.innerHTML = "";
-
-  statements.forEach((st, idx) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "vote-btn";
-    btn.style.justifyContent = "flex-start";
-    btn.style.textAlign = "left";
-    btn.innerHTML = `<strong style="color:var(--cyan); margin-right:8px;">${["A", "B", "C"][idx]}:</strong> <span>${escapeHtml(st)}</span>`;
-
-    btn.addEventListener("click", () => {
-      list.querySelectorAll(".vote-btn").forEach((b) => b.classList.remove("selected"));
-      btn.classList.add("selected");
-      document.getElementById("tres-vote-feedback").style.display = "block";
-      showToast("Voto registrado", "🗳️");
+  const realIdx = parseInt(document.querySelector('input[name="radio-real-statement"]:checked')?.value || "0", 10);
+  try {
+    await setDoc(doc(db, "salas", w.code, `s_${room.gameId}`, profile.playerId), {
+      name: profile.name,
+      avatar: profile.avatar,
+      statements,
+      realIdx,
     });
-    list.appendChild(btn);
-  });
-
-  // Botón revelar
-  document.getElementById("btn-reveal-real-statement")?.addEventListener("click", () => {
-    const buttons = list.querySelectorAll(".vote-btn");
-    buttons.forEach((b, i) => {
-      if (i === realIndex) {
-        b.style.borderColor = "var(--emerald)";
-        b.style.background = "rgba(16, 185, 129, 0.25)";
-        b.innerHTML += ` <span style="margin-left:auto; color:var(--emerald); font-weight:800;">✓ ¡VERDAD!</span>`;
-      } else {
-        b.style.opacity = "0.5";
-      }
-    });
-    showToast("¡La verdad ha sido revelada!", "🎉");
-  });
-
-  document.getElementById("btn-next-tres-player")?.addEventListener("click", () => {
-    showToast("Cargando turno del siguiente jugador...", "🎲");
-    document.getElementById("tres-step-vote").style.display = "none";
-    document.getElementById("tres-step-write").style.display = "block";
-  });
-}
-
-function setupTresConfesionesPhase(state, roomData) {
-  document.getElementById("tres-step-write").style.display = "block";
-  document.getElementById("tres-step-vote").style.display = "none";
-}
-
-// ==========================================
-// 7. DINÁMICA: MURO DE BAÑO / DESAHOGO EN VIVO
-// ==========================================
-const wallColors = ["color-yellow", "color-pink", "color-cyan", "color-green", "color-orange"];
-
-function setupMuroPhase(title) {
-  const container = document.getElementById("muro-notes-wall");
-  if (!container) return;
-  // Añadir notas de ejemplo iniciales
-  if (container.children.length === 0) {
-    addNoteToWall("¡Bienvenidos a la fiesta! 🎉 No se olviden de dejar su saludo.", "color-cyan");
-    addNoteToWall("Alguien que ponga cumbia o reggaetón del viejito por favor 😂", "color-yellow");
-    addNoteToWall("Confieso que me comí los últimos tequeños y le eché la culpa al perro 🌭", "color-pink");
+    store("session", submissionKey(room), "1");
+    renderGame(w);
+    showToast("Afirmaciones guardadas", "🎭");
+  } catch (err) {
+    showToast("No se pudo guardar: " + friendlyError(err), "❌");
   }
-
-  listenToMuroUpdates();
 }
 
-function addNoteToWall(text, colorClass) {
-  const wall = document.getElementById("muro-notes-wall");
-  if (!wall) return;
-  const note = document.createElement("div");
-  const randomRot = (Math.random() * 6 - 3).toFixed(1);
-  const color = colorClass || wallColors[Math.floor(Math.random() * wallColors.length)];
-
-  note.className = `wall-note ${color}`;
-  note.style.setProperty("--rot", `${randomRot}deg`);
-  note.textContent = text;
-  wall.prepend(note);
+function tresCurrentFor(sub) {
+  return { playerId: sub.id, name: sub.name, avatar: sub.avatar || "👤", statements: sub.statements };
 }
 
-document.getElementById("btn-post-muro-note")?.addEventListener("click", async () => {
-  const input = document.getElementById("input-muro-note");
-  const text = input.value.trim();
-  if (!text) return;
+// ---------- Respuestas en sincronía ----------
+function duoAnswerKey(room) {
+  return `rh_d_${roomWatcher.code}_${room.gameId}_${room.round}`;
+}
 
-  const color = wallColors[Math.floor(Math.random() * wallColors.length)];
-  addNoteToWall(text, color);
-  input.value = "";
-  showToast("¡Nota publicada en el muro!", "🧱");
+function renderDuo(w) {
+  const room = w.room;
+  const players = activePlayers(w.players);
+  const question = room.deck[room.pos] || "";
+  const answered = !!load("session", duoAnswerKey(room));
+  const answers = w.answers;
+  const revealed = room.phase === "reveal" || (players.length >= 2 && answers.length >= players.length);
 
-  if (firestoreAvailable && db && currentSession.currentRoomId) {
-    try {
-      await addDoc(collection(db, "salas", currentSession.currentRoomId, "muro"), {
-        text: text,
-        color: color,
-        createdAt: serverTimestamp(),
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  }
-});
-
-function listenToMuroUpdates() {
-  if (!firestoreAvailable || !db || !currentSession.currentRoomId) return;
-
-  const muroCol = query(
-    collection(db, "salas", currentSession.currentRoomId, "muro"),
-    orderBy("createdAt", "desc")
+  $("game-status").textContent = `Pregunta ${room.pos + 1} de ${room.deck.length}`;
+  ensurePanel(
+    `duo|${room.gameId}|${room.round}|${answered}|${revealed}`,
+    `
+    <div class="question-hero">
+      <span class="type-badge">⚡ Todos responden en secreto</span>
+      <p class="question-hero-text">${escapeHtml(question)}</p>
+    </div>
+    ${revealed ? `<div id="g-results"></div>`
+      : answered ? `<div class="waiting"><div class="waiting-icon">🔐</div><p>Respuesta guardada. Se revelan todas cuando el resto termine.</p></div>`
+      : `<div class="join-row">
+           <input type="text" class="input-field" id="txt-duo-answer" maxlength="120" placeholder="Tu respuesta...">
+           <button type="button" class="btn btn-purple" data-action="submit-duo">🔒 Listo</button>
+         </div>`}
+    <div class="progress-line" id="g-progress"></div>`
   );
-  currentSession.unsubscribeMuro = onSnapshot(muroCol, (snap) => {
-    const wall = document.getElementById("muro-notes-wall");
-    if (!wall) return;
-    wall.innerHTML = "";
-    snap.forEach((docSnap) => {
-      const data = docSnap.data();
-      addNoteToWall(data.text, data.color);
-    });
-  });
+
+  $("g-progress").textContent = revealed ? "" : `🔐 ${answers.length} de ${players.length} respondieron`;
+  if (revealed) {
+    $("g-results").innerHTML = answers.length
+      ? `<div class="answers-grid">${answers
+          .map((a) => `<div class="answer-card"><span class="eyebrow">${a.avatar || "👤"} ${escapeHtml(a.name)}</span><p>${escapeHtml(a.answer)}</p></div>`)
+          .join("")}</div>`
+      : `<p class="muted-small center">Nadie respondió esta pregunta.</p>`;
+  }
+
+  $("game-host-bar").innerHTML = isHost()
+    ? hostButtons([
+        ...(revealed ? [] : [{ action: "duo-reveal", label: "👀 Revelar ya", cls: "btn-secondary" }]),
+        { action: "duo-next", label: "Siguiente pregunta ➔" },
+      ])
+    : nonHostNote("El anfitrión pasa a la siguiente pregunta.");
 }
 
-// ==========================================
-// 8. DINÁMICA: DÚO SINCRONIZADO
-// ==========================================
-const duoDilemasFallback = [
-  "¿Quién de los dos tiene mejor sentido del humor?",
-  "Si pudiéramos viajar juntos mañana, ¿playa tropical o cabaña en la nieve?",
-  "¿Quién es más probable que pierda la paciencia primero en un trancón?",
-  "¿Qué nos define mejor hoy: pura química o amigos con complicidad?",
-  "Si tuvieran que pedir delivery ahora mismo, ¿qué comen?",
-];
-let duoIndex = 0;
-let duoDeck = [];
-
-function setupDuoPhase() {
-  const pool = [
-    ...(categories.find((c) => c.id === "citas_nivel1")?.preguntas || []),
-    ...(categories.find((c) => c.id === "citas_nivel2")?.preguntas || []),
-    ...(categories.find((c) => c.id === "dilemas_absurdos")?.preguntas || []),
-    ...(categories.find((c) => c.id === "quien_es_mas_probable")?.preguntas || []),
-  ];
-  duoDeck = shuffleArray(pool.length > 0 ? pool : duoDilemasFallback);
-  duoIndex = 0;
-  loadDuoDilema();
-}
-
-function loadDuoDilema() {
-  if (!duoDeck || duoDeck.length === 0) setupDuoPhase();
-  const q = duoDeck[duoIndex % duoDeck.length];
-  document.getElementById("lbl-duo-question").textContent = `"${q}"`;
-  document.getElementById("duo-input-area").style.display = "block";
-  document.getElementById("duo-lock-status").style.display = "none";
-  document.getElementById("duo-revealed-answers").style.display = "none";
-  document.getElementById("txt-duo-answer").value = "";
-}
-
-document.getElementById("btn-submit-duo-answer")?.addEventListener("click", () => {
-  const ans = document.getElementById("txt-duo-answer").value.trim();
-  if (!ans) {
+async function submitDuo() {
+  const w = roomWatcher;
+  const room = w.room;
+  const answer = $("txt-duo-answer")?.value.trim();
+  if (!answer) {
     showToast("Escribe tu respuesta primero", "✍️");
     return;
   }
-
-  document.getElementById("duo-input-area").style.display = "none";
-  document.getElementById("duo-lock-status").style.display = "block";
-  showToast("Respuesta bloqueada. Esperando a tu acompañante...", "🔒");
-
-  // Simulación de respuesta mutua a los 2 segundos
-  setTimeout(() => {
-    document.getElementById("duo-lock-status").style.display = "none";
-    document.getElementById("duo-revealed-answers").style.display = "block";
-
-    document.getElementById("lbl-duo-p1-name").textContent = currentSession.playerName || "Tú";
-    document.getElementById("lbl-duo-p1-ans").textContent = `"${ans}"`;
-
-    document.getElementById("lbl-duo-p2-name").textContent = "Tu Acompañante";
-    document.getElementById("lbl-duo-p2-ans").textContent = '"¡Totalmente de acuerdo!"';
-    showToast("¡PUM! Respuestas reveladas a la vez", "💥");
-  }, 2000);
-});
-
-document.getElementById("btn-duo-next-question")?.addEventListener("click", () => {
-  duoIndex++;
-  loadDuoDilema();
-});
-
-// ==========================================
-// 9. MODO TV / PROYECTOR (BIG SCREEN)
-// ==========================================
-let tvSelectedSource = "sala_sync";
-let tvQuestionIndex = 0;
-let tvDeck = [];
-
-function setupTvControls() {
-  const btns = document.querySelectorAll(".tv-cat-btn");
-  btns.forEach((b) => {
-    b.addEventListener("click", () => {
-      btns.forEach((x) => x.classList.remove("selected"));
-      b.classList.add("selected");
-      const target = b.getAttribute("data-tvcat");
-      setTvSource(target);
+  try {
+    await setDoc(doc(db, "salas", w.code, `d_${room.gameId}_${room.round}`, profile.playerId), {
+      name: profile.name,
+      avatar: profile.avatar,
+      answer,
     });
+    store("session", duoAnswerKey(room), "1");
+    renderGame(w);
+  } catch (err) {
+    showToast("No se pudo enviar: " + friendlyError(err), "❌");
+  }
+}
+
+// ---------- Muro anónimo ----------
+const WALL_COLORS = ["color-yellow", "color-pink", "color-cyan", "color-green", "color-orange"];
+
+function wallNotesHtml(notes) {
+  if (notes.length === 0) return `<p class="muted-small center">El muro está vacío. ¡Escribe lo primero!</p>`;
+  return notes
+    .map((n) => {
+      const rot = ((n.id.charCodeAt(0) % 7) - 3) * 0.8;
+      return `<div class="wall-note ${WALL_COLORS.includes(n.color) ? n.color : "color-yellow"}" style="--rot:${rot}deg">${escapeHtml(n.text)}</div>`;
+    })
+    .join("");
+}
+
+function renderMuro(w) {
+  $("game-status").textContent = `${w.muro.length} ${w.muro.length === 1 ? "mensaje" : "mensajes"} en el muro`;
+  ensurePanel(
+    `muro|${w.room.gameId}`,
+    `
+    <div class="room-box inner">
+      <h3 class="panel-title">Escribe en el muro ✍️</h3>
+      <div class="notice notice-safe">🛡️ 100% anónimo: tu nombre no se guarda en ningún lado.</div>
+      <div class="join-row">
+        <input type="text" class="input-field" id="input-muro-note" maxlength="140" placeholder="Un saludo, un desahogo, un piropo secreto...">
+        <button type="button" class="btn btn-primary" data-action="post-muro">Publicar</button>
+      </div>
+    </div>
+    <div class="wall-container" id="muro-notes-wall"></div>`
+  );
+  $("muro-notes-wall").innerHTML = wallNotesHtml(w.muro);
+  $("game-host-bar").innerHTML = "";
+}
+
+async function postMuroNote() {
+  const input = $("input-muro-note");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  try {
+    await addDoc(collection(db, "salas", roomWatcher.code, "muro"), {
+      text,
+      color: WALL_COLORS[Math.floor(Math.random() * WALL_COLORS.length)],
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    input.value = text;
+    showToast("No se pudo publicar: " + friendlyError(err), "❌");
+  }
+}
+
+// ---------- Pantalla final (confesiones / 2 mentiras) ----------
+function renderEndPanel(w, title, restartAction) {
+  $("game-status").textContent = "Fin de la ronda";
+  ensurePanel(
+    `end|${w.room.gameId}`,
+    `<div class="waiting"><div class="waiting-icon">🎉</div><h3 class="panel-title">${title}</h3></div>`
+  );
+  $("game-host-bar").innerHTML = isHost()
+    ? hostButtons([
+        { action: restartAction, label: "🔁 Otra ronda", cls: "btn-purple" },
+        { action: "end-game", label: "← Volver a la sala", cls: "btn-secondary" },
+      ])
+    : nonHostNote("Esperando al anfitrión...");
+}
+
+// ---------- Acciones del anfitrión ----------
+const HOST_ACTIONS = {
+  "show-results": () => hostUpdate({ phase: "results" }),
+
+  "next-question": () => {
+    const r = roomWatcher.room;
+    return hostUpdate({
+      pos: (r.pos + 1) % r.deck.length,
+      round: r.round + 1,
+      phase: "vote",
+      speaker: pickSpeaker(roomWatcher.players, r.speaker?.id),
+    });
+  },
+
+  "reroll-speaker": () => hostUpdate({ speaker: pickSpeaker(roomWatcher.players, roomWatcher.room.speaker?.id) }),
+
+  "conf-start-vote": () => {
+    const subs = shuffleArray(roomWatcher.subs);
+    if (subs.length === 0) return;
+    return hostUpdate({
+      phase: "vote",
+      order: subs.map((s) => s.id),
+      pos: 0,
+      round: roomWatcher.room.round + 1,
+      current: { text: subs[0].text },
+      currentAuthor: null,
+    });
+  },
+
+  "conf-reveal": () => {
+    const r = roomWatcher.room;
+    const sub = roomWatcher.subs.find((s) => s.id === r.order[r.pos]);
+    return hostUpdate({ phase: "results", currentAuthor: sub?.authorName || "Anónimo" });
+  },
+
+  "conf-next": () => {
+    const r = roomWatcher.room;
+    const nextPos = r.pos + 1;
+    if (nextPos >= r.order.length) return hostUpdate({ phase: "end" });
+    const sub = roomWatcher.subs.find((s) => s.id === r.order[nextPos]);
+    return hostUpdate({ phase: "vote", pos: nextPos, round: r.round + 1, current: { text: sub?.text || "" }, currentAuthor: null });
+  },
+
+  "conf-restart": () => hostUpdate({ ...gameResetFields(), phase: "write", gameId: randomId(6) }),
+
+  "tres-start-vote": () => {
+    const subs = shuffleArray(roomWatcher.subs);
+    if (subs.length === 0) return;
+    return hostUpdate({
+      phase: "vote",
+      order: subs.map((s) => s.id),
+      pos: 0,
+      round: roomWatcher.room.round + 1,
+      current: tresCurrentFor(subs[0]),
+      realIdx: null,
+    });
+  },
+
+  "tres-reveal": () => {
+    const r = roomWatcher.room;
+    const sub = roomWatcher.subs.find((s) => s.id === r.current?.playerId);
+    return hostUpdate({ phase: "results", realIdx: sub?.realIdx ?? 0 });
+  },
+
+  "tres-next": () => {
+    const r = roomWatcher.room;
+    const nextPos = r.pos + 1;
+    if (nextPos >= r.order.length) return hostUpdate({ phase: "end" });
+    const sub = roomWatcher.subs.find((s) => s.id === r.order[nextPos]);
+    if (!sub) return hostUpdate({ phase: "end" });
+    return hostUpdate({ phase: "vote", pos: nextPos, round: r.round + 1, current: tresCurrentFor(sub), realIdx: null });
+  },
+
+  "tres-restart": () => hostUpdate({ ...gameResetFields(), phase: "write", gameId: randomId(6) }),
+
+  "duo-reveal": () => hostUpdate({ phase: "reveal" }),
+
+  "duo-next": () => {
+    const r = roomWatcher.room;
+    return hostUpdate({ pos: (r.pos + 1) % r.deck.length, round: r.round + 1, phase: "answer" });
+  },
+
+  "end-game": () => hostUpdate({ state: "lobby" }),
+};
+
+$("game-host-bar").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-host]");
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  Promise.resolve(HOST_ACTIONS[btn.dataset.host]?.()).finally(() => { btn.disabled = false; });
+});
+
+$("game-panel").addEventListener("click", (e) => {
+  const voteBtn = e.target.closest(".vote-btn[data-vote]");
+  if (voteBtn) {
+    handleVoteClick(voteBtn);
+    return;
+  }
+  const actionBtn = e.target.closest("[data-action]");
+  if (!actionBtn) return;
+  const actions = { "submit-confession": submitConfession, "submit-tres": submitTres, "submit-duo": submitDuo, "post-muro": postMuroNote };
+  actions[actionBtn.dataset.action]?.();
+});
+
+$("game-panel").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  if (e.target.id === "input-muro-note") postMuroNote();
+  if (e.target.id === "txt-duo-answer") submitDuo();
+});
+
+$("btn-game-back").addEventListener("click", () => {
+  if (isHost()) {
+    if (confirm("¿Terminar la dinámica y volver todos a la sala?")) HOST_ACTIONS["end-game"]();
+  } else if (confirm("¿Salir de la sala?")) {
+    leaveRoom();
+  }
+});
+
+// ==========================================
+// 6. MODO TV / PROYECTOR
+// ==========================================
+const TV_CATEGORIES = ["dilemas_absurdos", "quien_es_mas_probable", "amigos_fiesta", "empresas_trabajo", "citas_nivel1"];
+const tv = { source: "sala_sync", deck: [], index: 0, watcher: null };
+
+function setupTvCategoryBar() {
+  const bar = $("tv-category-bar");
+  TV_CATEGORIES.map(getCategory).filter(Boolean).forEach((cat) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "filter-chip";
+    btn.dataset.tvcat = cat.id;
+    btn.textContent = `${cat.icono} ${cat.titulo}`;
+    bar.appendChild(btn);
   });
-
-  document.getElementById("btn-tv-next-q")?.addEventListener("click", () => {
-    tvQuestionIndex++;
-    renderTvQuestion();
-  });
-
-  document.getElementById("btn-tv-shuffle")?.addEventListener("click", () => {
-    const cat = categories.find((c) => c.id === tvSelectedSource);
-    if (cat) {
-      tvDeck = shuffleArray([...cat.preguntas]);
-      tvQuestionIndex = 0;
-      renderTvQuestion();
-      showToast("¡Preguntas de TV rebarajadas al azar! 🎲", "🔀");
-    }
-  });
-
-  // Atajos de teclado para presentaciones / proyector (Barra espaciadora o Flecha Derecha)
-  window.addEventListener("keydown", (e) => {
-    const tvScreen = document.getElementById("view-tv");
-    if (!tvScreen || !tvScreen.classList.contains("active")) return;
-    if (tvSelectedSource === "sala_sync") return;
-
-    if (e.code === "Space" || e.code === "ArrowRight") {
-      e.preventDefault();
-      tvQuestionIndex++;
-      renderTvQuestion();
-    } else if (e.code === "ArrowLeft") {
-      e.preventDefault();
-      if (tvDeck.length > 0) {
-        tvQuestionIndex = (tvQuestionIndex - 1 + tvDeck.length) % tvDeck.length;
-        renderTvQuestion();
-      }
-    }
+  bar.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-tvcat]");
+    if (!btn) return;
+    bar.querySelectorAll("[data-tvcat]").forEach((b) => b.classList.toggle("active", b === btn));
+    setTvSource(btn.dataset.tvcat);
   });
 }
 
 function setTvSource(sourceId) {
-  tvSelectedSource = sourceId;
-  const stageLive = document.getElementById("tv-stage-content");
-  const stageQuestions = document.getElementById("tv-stage-questions");
-
-  if (sourceId === "sala_sync") {
-    if (stageLive) stageLive.style.display = "block";
-    if (stageQuestions) stageQuestions.style.display = "none";
-  } else {
-    if (stageLive) stageLive.style.display = "none";
-    if (stageQuestions) stageQuestions.style.display = "block";
-
-    const cat = categories.find((c) => c.id === sourceId);
-    if (cat) {
-      tvDeck = shuffleArray([...cat.preguntas]);
-      tvQuestionIndex = 0;
-      renderTvQuestion();
-    }
+  tv.source = sourceId;
+  $("tv-stage-room").hidden = sourceId !== "sala_sync";
+  $("tv-stage-questions").hidden = sourceId === "sala_sync";
+  if (sourceId !== "sala_sync") {
+    tv.deck = shuffleArray(getCategory(sourceId).preguntas);
+    tv.index = 0;
+    renderTvQuestion();
   }
 }
 
 function renderTvQuestion() {
-  const cat = categories.find((c) => c.id === tvSelectedSource);
-  if (!cat || !tvDeck || tvDeck.length === 0) return;
+  const cat = getCategory(tv.source);
+  if (!cat || tv.deck.length === 0) return;
+  tv.index = ((tv.index % tv.deck.length) + tv.deck.length) % tv.deck.length;
+  $("tv-q-cat-badge").textContent = `${cat.icono} ${cat.titulo} · ${tv.index + 1} de ${tv.deck.length}`;
+  $("tv-q-cat-badge").style.color = cat.color || "var(--cyan)";
+  $("tv-giant-q-text").textContent = tv.deck[tv.index];
+}
 
-  const idx = Math.abs(tvQuestionIndex) % tvDeck.length;
-  tvQuestionIndex = idx;
+$("btn-tv-next-q").addEventListener("click", () => { tv.index++; renderTvQuestion(); });
+$("btn-tv-prev-q").addEventListener("click", () => { tv.index--; renderTvQuestion(); });
+$("btn-tv-shuffle").addEventListener("click", () => {
+  tv.deck = shuffleArray(tv.deck);
+  tv.index = 0;
+  renderTvQuestion();
+  showToast("Preguntas barajadas", "🔀");
+});
 
-  const qText = tvDeck[idx];
-  const badgeEl = document.getElementById("tv-q-cat-badge");
-  const textEl = document.getElementById("tv-giant-q-text");
-
-  if (badgeEl) {
-    badgeEl.textContent = `${cat.icono || "🧊"} ${cat.titulo} • Pregunta ${idx + 1} de ${tvDeck.length} 🎲`;
-    badgeEl.style.color = cat.color || "var(--cyan)";
+window.addEventListener("keydown", (e) => {
+  if (activeViewId() !== "view-tv" || tv.source === "sala_sync") return;
+  if (e.target.matches("input, textarea")) return;
+  if (e.code === "Space" || e.code === "ArrowRight") {
+    e.preventDefault();
+    tv.index++;
+    renderTvQuestion();
+  } else if (e.code === "ArrowLeft") {
+    e.preventDefault();
+    tv.index--;
+    renderTvQuestion();
   }
-  if (textEl) {
-    textEl.textContent = `"${qText}"`;
+});
+
+function tvWatchRoom(code) {
+  tv.watcher?.stop();
+  $("tv-room-connect").hidden = true;
+  $("tv-room-live").hidden = false;
+  $("tv-code-cta").hidden = false;
+  $("tv-room-code-display").textContent = code;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(roomShareUrl(code))}&color=070a12&bgcolor=ffffff`;
+  $("tv-qr-container").innerHTML = `<img src="${qrUrl}" alt="QR para unirse a la sala ${code}">`;
+  tv.watcher = createRoomWatcher(code, renderTvRoom, () => {
+    showToast(`La sala ${code} no existe`, "❌");
+    tvDisconnect();
+  });
+}
+
+function tvDisconnect() {
+  tv.watcher?.stop();
+  tv.watcher = null;
+  $("tv-room-connect").hidden = false;
+  $("tv-room-live").hidden = true;
+  $("tv-code-cta").hidden = true;
+}
+
+// En la TV nunca se muestra quién escribió o votó algo, solo lo que ya es público en los celulares
+function renderTvRoom(w) {
+  const room = w.room;
+  if (!room) return;
+  const players = activePlayers(w.players);
+  $("tv-players-list").innerHTML = playerChipsHtml(players, room.hostId);
+  const status = $("tv-live-status");
+  const headline = $("tv-main-headline");
+  const results = $("tv-live-results");
+  results.innerHTML = "";
+
+  if (room.state !== "playing") {
+    status.textContent = `${players.length} ${players.length === 1 ? "jugador conectado" : "jugadores conectados"}`;
+    headline.textContent = "Escanea el QR o entra con el código para jugar";
+    return;
+  }
+
+  const dyn = getDynamic(room.dynamicKey);
+  status.textContent = `${dyn.icon} ${dyn.title}`;
+
+  if (room.mode === "preguntas") {
+    const question = room.deck[room.pos] || "";
+    const info = classifyGroupQuestion(question, room.category);
+    headline.textContent = question;
+    if (info.type === "open") {
+      results.innerHTML = room.speaker ? `<div class="results-headline">🎤 Responde: ${room.speaker.avatar} ${escapeHtml(room.speaker.name)}</div>` : "";
+      return;
+    }
+    const showResults = room.phase === "results" || (players.length > 0 && w.votes.length >= players.length);
+    if (!showResults) {
+      results.innerHTML = `<div class="results-headline">🗳️ ${w.votes.length} de ${players.length} votaron</div>`;
+    } else if (w.votes.length) {
+      const html = info.type === "suspect" ? suspectResultsHtml(w.votes, w.players)
+        : info.type === "choice" ? choiceResultsHtml(w.votes, info.options)
+        : yesNoResultsHtml(w.votes, info, !!room.settings?.revealGender);
+      results.innerHTML = `<div class="results-box">${html}</div>`;
+    }
+  } else if (room.mode === "confesiones") {
+    if (room.phase === "write") {
+      headline.textContent = "Escriban su confesión en el celular 🤫";
+      results.innerHTML = `<div class="results-headline">✍️ ${w.subs.length} de ${players.length} enviaron</div>`;
+    } else if (room.phase === "end") {
+      headline.textContent = "¡Se acabaron las confesiones! 🎉";
+    } else {
+      headline.textContent = `"${room.current?.text || ""}"`;
+      const showResults = room.phase === "results" || w.votes.length >= players.length;
+      results.innerHTML = showResults && w.votes.length ? `<div class="results-box">${suspectResultsHtml(w.votes, w.players)}</div>` : `<div class="results-headline">🗳️ ${w.votes.length} de ${players.length} votaron</div>`;
+      if (room.currentAuthor) results.innerHTML += `<div class="author-reveal"><span class="eyebrow">💥 Era de</span><div class="speaker-name">${escapeHtml(room.currentAuthor)}</div></div>`;
+    }
+  } else if (room.mode === "tres") {
+    if (room.phase === "write") {
+      headline.textContent = "Escriban 2 mentiras y 1 verdad 🎭";
+      results.innerHTML = `<div class="results-headline">✍️ ${w.subs.length} de ${players.length} listos</div>`;
+    } else if (room.phase === "end") {
+      headline.textContent = "¡Ya jugaron todos! 🎉";
+    } else {
+      const c = room.current || {};
+      headline.textContent = `${c.avatar || ""} ${c.name || ""}: ¿cuál es la verdad?`;
+      const revealed = room.phase === "results";
+      results.innerHTML = `<div class="statement-list">${(c.statements || [])
+        .map((s, i) => `<div class="statement-result ${revealed ? (i === room.realIdx ? "is-true" : "is-false") : ""}"><strong>${"ABC"[i]}:</strong> ${escapeHtml(s)}</div>`)
+        .join("")}</div>`;
+    }
+  } else if (room.mode === "duo") {
+    headline.textContent = room.deck[room.pos] || "";
+    const revealed = room.phase === "reveal" || (players.length >= 2 && w.answers.length >= players.length);
+    results.innerHTML = revealed
+      ? `<div class="answers-grid">${w.answers.map((a) => `<div class="answer-card"><span class="eyebrow">${a.avatar || "👤"} ${escapeHtml(a.name)}</span><p>${escapeHtml(a.answer)}</p></div>`).join("")}</div>`
+      : `<div class="results-headline">🔐 ${w.answers.length} de ${players.length} respondieron</div>`;
+  } else if (room.mode === "muro") {
+    headline.textContent = "Muro anónimo 🧱";
+    results.innerHTML = `<div class="wall-container">${wallNotesHtml(w.muro.slice(0, 24))}</div>`;
   }
 }
 
-document.getElementById("btn-open-tv-mode")?.addEventListener("click", () => {
-  const room = currentSession.currentRoomId || "HIELO";
-  enterTvMode(room);
+$("btn-tv-watch-room").addEventListener("click", () => {
+  const code = $("input-tv-room-code").value.trim().toUpperCase();
+  if (code.length < 4) {
+    showToast("Escribe el código de la sala", "⚠️");
+    return;
+  }
+  tvWatchRoom(code);
 });
 
-document.getElementById("btn-lobby-tv-shortcut")?.addEventListener("click", () => {
-  const room = currentSession.currentRoomId || "HIELO";
-  enterTvMode(room);
+$("input-tv-room-code").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("btn-tv-watch-room").click();
 });
 
-document.getElementById("btn-close-tv")?.addEventListener("click", () => {
-  switchView(currentSession.currentRoomId ? "view-lobby" : "view-home");
-});
-
-function enterTvMode(roomCode) {
-  document.getElementById("tv-room-code-display").textContent = roomCode;
-  generateQrCodes(roomCode);
+function openTv(code) {
   switchView("view-tv");
-  showToast("Modo TV / Pantalla Gigante activado 📺", "✨");
+  const chip = document.querySelector('#tv-category-bar [data-tvcat="sala_sync"]');
+  document.querySelectorAll("#tv-category-bar [data-tvcat]").forEach((b) => b.classList.toggle("active", b === chip));
+  setTvSource("sala_sync");
+  if (code) tvWatchRoom(code);
 }
 
+$("btn-close-tv").addEventListener("click", () => {
+  tvDisconnect();
+  if (roomWatcher) {
+    lastPanelKey = null;
+    switchView(roomWatcher.room?.state === "playing" ? "view-game" : "view-lobby");
+    onRoomUpdate(roomWatcher);
+  } else {
+    switchView("view-home");
+  }
+});
+
 // ==========================================
-// 10. PANEL DE ADMINISTRACIÓN DE PREGUNTAS
+// 7. PANEL DE ADMINISTRACIÓN (ediciones locales + exportar)
 // ==========================================
-const adminModal = document.getElementById("modal-admin");
-const btnOpenAdmin = document.getElementById("btn-open-admin");
-const btnCloseAdmin = document.getElementById("btn-close-admin");
 let isAdminLoggedIn = false;
 
-btnOpenAdmin?.addEventListener("click", () => {
-  adminModal.classList.add("active");
-  if (isAdminLoggedIn) {
-    showAdminPanel();
-  }
-});
+function openAdmin() {
+  $("modal-admin").classList.add("active");
+  if (isAdminLoggedIn) showAdminPanel();
+}
 
-document.getElementById("footer-btn-admin")?.addEventListener("click", () => {
-  adminModal.classList.add("active");
-  if (isAdminLoggedIn) {
-    showAdminPanel();
-  }
-});
+$("btn-open-admin").addEventListener("click", openAdmin);
+$("btn-close-admin").addEventListener("click", () => $("modal-admin").classList.remove("active"));
 
-btnCloseAdmin?.addEventListener("click", () => {
-  adminModal.classList.remove("active");
-});
-
-// Login Admin
-document.getElementById("btn-admin-login")?.addEventListener("click", () => {
-  const u = document.getElementById("admin-user-input").value.trim();
-  const p = document.getElementById("admin-pass-input").value.trim();
-
-  // Credenciales por defecto: admin / hielo2025
-  if ((u === "admin" && p === "hielo2025") || (u === "admin" && p === "admin")) {
+$("btn-admin-login").addEventListener("click", () => {
+  const u = $("admin-user-input").value.trim();
+  const p = $("admin-pass-input").value.trim();
+  if (u === "admin" && p === "hielo2025") {
     isAdminLoggedIn = true;
-    showToast("¡Bienvenido, Administrador!", "🔑");
     showAdminPanel();
   } else {
-    showToast("Credenciales incorrectas (defecto: admin / hielo2025)", "❌");
+    showToast("Usuario o contraseña incorrectos", "❌");
   }
 });
 
-document.getElementById("btn-admin-logout")?.addEventListener("click", () => {
+$("btn-admin-logout").addEventListener("click", () => {
   isAdminLoggedIn = false;
-  document.getElementById("admin-login-box").style.display = "block";
-  document.getElementById("admin-panel-box").style.display = "none";
-  showToast("Sesión cerrada", "👋");
+  $("admin-login-box").hidden = false;
+  $("admin-panel-box").hidden = true;
 });
 
 function showAdminPanel() {
-  document.getElementById("admin-login-box").style.display = "none";
-  document.getElementById("admin-panel-box").style.display = "block";
-
-  // Llenar selector de categorías
-  const select = document.getElementById("admin-select-category");
-  select.innerHTML = "";
-  categories.forEach((cat) => {
-    const opt = document.createElement("option");
-    opt.value = cat.id;
-    opt.textContent = `${cat.icono || "🧊"} ${cat.titulo}`;
-    select.appendChild(opt);
-  });
-
+  $("admin-login-box").hidden = true;
+  $("admin-panel-box").hidden = false;
+  const select = $("admin-select-category");
+  const previous = select.value;
+  select.innerHTML = categories.map((c) => `<option value="${c.id}">${c.icono || "🧊"} ${escapeHtml(c.titulo)}</option>`).join("");
+  if (previous) select.value = previous;
   renderAdminQuestionsList(select.value);
-  select.onchange = () => renderAdminQuestionsList(select.value);
 }
+
+$("admin-select-category").addEventListener("change", (e) => renderAdminQuestionsList(e.target.value));
 
 function renderAdminQuestionsList(catId) {
   const cat = categories.find((c) => c.id === catId);
-  const container = document.getElementById("admin-questions-list");
-  if (!cat || !container) return;
-
-  document.getElementById("admin-questions-count").textContent = cat.preguntas.length;
-  container.innerHTML = "";
-
-  // NOTA: En el modo administrador se presentan SIEMPRE EN SU ORDEN FIJO ORIGINAL (#1 al #100)
-  // para permitir una revisión, auditoría, filtrado y edición predecible sin saltos.
-  cat.preguntas.forEach((qText, idx) => {
-    const item = document.createElement("div");
-    item.className = "admin-list-item";
-    item.innerHTML = `
-      <span style="font-size:11.5px; font-weight:800; color:var(--cyan); min-width:34px; padding:2px 4px; background:rgba(56,189,248,0.1); border-radius:4px; text-align:center;">#${idx + 1}</span>
-      <span style="font-size:13.5px; flex:1; line-height:1.4; margin-left:6px;">${escapeHtml(qText)}</span>
-      <div style="display:flex; gap:6px;">
-        <button type="button" class="btn btn-secondary" style="font-size:11px; padding:4px 8px;" data-edit="${idx}" title="Editar texto">✏️</button>
-        <button type="button" class="btn btn-danger" style="font-size:11px; padding:4px 8px;" data-del="${idx}" title="Eliminar pregunta">🗑️</button>
-      </div>
-    `;
-
-    // Editar
-    item.querySelector("[data-edit]").addEventListener("click", () => {
-      const nuevo = prompt("Modificar pregunta:", qText);
-      if (nuevo && nuevo.trim()) {
-        cat.preguntas[idx] = nuevo.trim();
-        saveCategories(categories);
-        renderAdminQuestionsList(catId);
-        renderHomeCategories();
-        showToast("Pregunta actualizada", "✓");
-      }
-    });
-
-    // Eliminar
-    item.querySelector("[data-del]").addEventListener("click", () => {
-      if (confirm("¿Eliminar esta pregunta?")) {
-        cat.preguntas.splice(idx, 1);
-        saveCategories(categories);
-        renderAdminQuestionsList(catId);
-        renderHomeCategories();
-        showToast("Pregunta eliminada", "🗑️");
-      }
-    });
-
-    container.appendChild(item);
-  });
+  if (!cat) return;
+  $("admin-questions-count").textContent = cat.preguntas.length;
+  $("admin-questions-list").innerHTML = cat.preguntas
+    .map(
+      (q, idx) => `
+      <div class="admin-list-item">
+        <span class="admin-num">#${idx + 1}</span>
+        <span class="admin-text">${escapeHtml(q)}</span>
+        <button type="button" class="btn btn-secondary btn-xs" data-edit="${idx}" title="Editar">✏️</button>
+        <button type="button" class="btn btn-danger btn-xs" data-del="${idx}" title="Eliminar">🗑️</button>
+      </div>`
+    )
+    .join("");
 }
 
-// Agregar pregunta
-document.getElementById("btn-admin-add-question")?.addEventListener("click", () => {
-  const select = document.getElementById("admin-select-category");
-  const input = document.getElementById("admin-input-new-question");
-  const text = input.value.trim();
-  if (!text) return;
-
-  const cat = categories.find((c) => c.id === select.value);
-  if (cat) {
-    cat.preguntas.push(text);
+$("admin-questions-list").addEventListener("click", (e) => {
+  const cat = categories.find((c) => c.id === $("admin-select-category").value);
+  const editBtn = e.target.closest("[data-edit]");
+  const delBtn = e.target.closest("[data-del]");
+  if (!cat) return;
+  if (editBtn) {
+    const idx = Number(editBtn.dataset.edit);
+    const nuevo = prompt("Editar pregunta:", cat.preguntas[idx]);
+    if (nuevo && nuevo.trim()) {
+      cat.preguntas[idx] = nuevo.trim();
+      saveCategories(categories);
+      renderAdminQuestionsList(cat.id);
+      showToast("Pregunta actualizada", "✓");
+    }
+  } else if (delBtn && confirm("¿Eliminar esta pregunta?")) {
+    cat.preguntas.splice(Number(delBtn.dataset.del), 1);
     saveCategories(categories);
-    input.value = "";
     renderAdminQuestionsList(cat.id);
-    renderHomeCategories();
-    showToast("Pregunta añadida con éxito", "✨");
+    showToast("Pregunta eliminada", "🗑️");
   }
 });
 
-// Sincronizar manualmente con la Nube (Firestore)
-document.getElementById("btn-admin-sync-cloud")?.addEventListener("click", async () => {
-  showToast("Subiendo todas las preguntas a Firebase Firestore...", "⏳");
-  await saveCategories(categories, true);
-  showToast("¡Banco de preguntas 100% sincronizado en la Nube!", "☁️");
+$("btn-admin-add-question").addEventListener("click", () => {
+  const input = $("admin-input-new-question");
+  const text = input.value.trim();
+  const cat = categories.find((c) => c.id === $("admin-select-category").value);
+  if (!text || !cat) return;
+  cat.preguntas.push(text);
+  saveCategories(categories);
+  input.value = "";
+  renderAdminQuestionsList(cat.id);
+  showToast("Pregunta agregada", "✨");
 });
 
-// Exportar archivo questions-data.js descargable
-document.getElementById("btn-admin-export-code")?.addEventListener("click", () => {
-  const codeContent = `// questions-data.js - Banco oficial de RompeHielos\nexport const DEFAULT_CATEGORIES = ${JSON.stringify(categories, null, 2)};\n`;
-  const blob = new Blob([codeContent], { type: "application/javascript" });
-  const url = URL.createObjectURL(blob);
+$("btn-admin-export-code").addEventListener("click", () => {
+  const code = `// questions-data.js - Banco oficial de RompeHielos (8 categorías)\nexport const DEFAULT_CATEGORIES = ${JSON.stringify(categories, null, 2)};\n`;
+  const url = URL.createObjectURL(new Blob([code], { type: "application/javascript" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = "questions-data.js";
-  document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast("Descargando questions-data.js con tus preguntas filtradas...", "💾");
+  showToast("Descargando questions-data.js", "💾");
 });
 
-// Restaurar oficiales
-document.getElementById("btn-admin-restore-defaults")?.addEventListener("click", () => {
-  if (confirm("¿Restaurar las preguntas oficiales de fábrica?")) {
-    saveCategories(JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)));
-    showAdminPanel();
-    renderHomeCategories();
-    showToast("Preguntas oficiales restauradas", "🔄");
-  }
+$("btn-admin-restore-defaults").addEventListener("click", () => {
+  if (!confirm("¿Descartar tus cambios y volver a las preguntas oficiales?")) return;
+  saveCategories(structuredClone(DEFAULT_CATEGORIES));
+  showAdminPanel();
+  showToast("Preguntas oficiales restauradas", "🔄");
 });
 
 // ==========================================
-// 11. NAVEGACIÓN GENERAL & INICIALIZACIÓN
+// 8. NAVEGACIÓN E INICIO
 // ==========================================
-document.getElementById("btn-brand-home")?.addEventListener("click", () => switchView("view-home"));
-
-document.getElementById("btn-back-lobby")?.addEventListener("click", () => switchView("view-home"));
-document.getElementById("btn-leave-game")?.addEventListener("click", () => switchView("view-lobby"));
-document.getElementById("btn-leave-tres-confesiones")?.addEventListener("click", () => switchView("view-lobby"));
-document.getElementById("btn-leave-muro")?.addEventListener("click", () => switchView("view-lobby"));
-document.getElementById("btn-leave-duo")?.addEventListener("click", () => switchView("view-lobby"));
-
-document.getElementById("footer-btn-solo")?.addEventListener("click", () => {
-  renderSoloCategories();
-  switchView("view-solo-categories");
-});
-document.getElementById("footer-btn-multi")?.addEventListener("click", () => switchView("view-lobby"));
-
-// Fullscreen toggle
-document.getElementById("btn-fullscreen")?.addEventListener("click", () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen?.().catch(() => {});
-  } else {
-    document.exitFullscreen?.().catch(() => {});
-  }
-});
-
-// Auto unirse si viene con ?room=XXXX en la URL (invitación por WhatsApp / enlace)
-function checkUrlRoomParam() {
-  const params = new URLSearchParams(window.location.search);
-  const room = params.get("room");
-  if (room) {
-    const cleanCode = room.trim().toUpperCase();
-    currentSession.currentRoomId = cleanCode;
-
-    // Cambiar a la vista de sala
-    switchView("view-lobby");
-
-    // Mostrar banner de invitación
-    const banner = document.getElementById("invited-room-banner");
-    const lblCode = document.getElementById("lbl-invited-room-code");
-    if (banner && lblCode) {
-      lblCode.textContent = cleanCode;
-      banner.style.display = "block";
-    }
-
-    // Prellenar código de sala
-    const codeInput = document.getElementById("input-room-code");
-    if (codeInput) {
-      codeInput.value = cleanCode;
-      document.getElementById("join-code-container").style.display = "block";
-    }
-
-    // Autoenfocar el nombre
-    const nameInput = document.getElementById("input-player-name");
-    if (nameInput) {
-      nameInput.placeholder = "Escribe tu nombre para entrar a la sala...";
-      setTimeout(() => nameInput.focus(), 300);
-    }
-
-    showToast(`¡Invitación a la sala ${cleanCode} detectada!`, "🎉");
+function openLobby() {
+  switchView(roomWatcher?.room?.state === "playing" ? "view-game" : "view-lobby");
+  if (roomWatcher) {
+    lastPanelKey = null;
+    onRoomUpdate(roomWatcher);
   }
 }
 
-// Inicializar la app
-window.addEventListener("DOMContentLoaded", () => {
-  initParticles();
-  setupAvatarPicker();
-  setupGenderPicker();
-  renderSoloCategories();
-  setupTvControls();
-  checkUrlRoomParam();
-  syncCategoriesWithFirestore();
+function onActivate(el, handler) {
+  el.addEventListener("click", handler);
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handler();
+    }
+  });
+}
+
+onActivate($("card-start-solo"), openSoloCategories);
+onActivate($("card-start-multi"), openLobby);
+onActivate($("card-start-tv"), () => openTv(roomWatcher?.code));
+$("btn-open-tv-mode").addEventListener("click", () => openTv(roomWatcher?.code));
+$("btn-brand-home").addEventListener("click", () => switchView("view-home"));
+$("btn-back-lobby").addEventListener("click", () => switchView("view-home"));
+$("footer-btn-solo").addEventListener("click", openSoloCategories);
+$("footer-btn-multi").addEventListener("click", openLobby);
+$("footer-btn-tv").addEventListener("click", () => openTv(roomWatcher?.code));
+
+$("btn-fullscreen").addEventListener("click", () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+  else document.exitFullscreen?.().catch(() => {});
 });
+
+// Invitación por enlace (?room=CODIGO) o volver a la sala tras recargar la página
+async function restoreRoomFromUrlOrSession() {
+  const invited = new URLSearchParams(window.location.search).get("room");
+  if (invited) {
+    const code = invited.trim().toUpperCase();
+    switchView("view-lobby");
+    $("invited-room-banner").hidden = false;
+    $("lbl-invited-room-code").textContent = code;
+    $("input-room-code").value = code;
+    $("join-code-container").hidden = false;
+    $("lobby-main-actions").hidden = true;
+    setTimeout(() => $("input-player-name").focus(), 300);
+    return;
+  }
+  const savedRoom = load("session", "rh_room");
+  if (savedRoom && profile.name) {
+    const ok = await joinRoom(savedRoom, { silent: true });
+    if (!ok) unstore("session", "rh_room");
+  }
+}
+
+initParticles();
+setupProfilePickers();
+renderDynamicsGrid();
+renderSoloCategories();
+setupTvCategoryBar();
+restoreRoomFromUrlOrSession();
