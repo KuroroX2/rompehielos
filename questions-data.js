@@ -2,7 +2,7 @@
 export const DEFAULT_CATEGORIES = [
   {
     "id": "secretos_intimos",
-    "titulo": "Secretos Íntimos (+18)",
+    "titulo": "Secretos íntimos (+18)",
     "descripcion": "Solo en salas: afirmaciones picantes que cada uno vota Sí o No en secreto.",
     "icono": "🔥",
     "color": "#f43f5e",
@@ -112,7 +112,7 @@ export const DEFAULT_CATEGORIES = [
   },
   {
     "id": "dilemas_absurdos",
-    "titulo": "Dilemas & Debates Absurdos",
+    "titulo": "Dilemas y debates absurdos",
     "descripcion": "Preguntas para discutir horas, reírse y ver la lógica retorcida de cada uno.",
     "icono": "🤯",
     "color": "#ff6b8b",
@@ -222,7 +222,7 @@ export const DEFAULT_CATEGORIES = [
   },
   {
     "id": "citas_nivel1",
-    "titulo": "Citas: Nivel 1 (Rompehielos & Gustos)",
+    "titulo": "Citas nivel 1: gustos y rompehielos",
     "descripcion": "Para primeros minutos de una cita o alguien que estás conociendo recién.",
     "icono": "☕",
     "color": "#38bdf8",
@@ -332,7 +332,7 @@ export const DEFAULT_CATEGORIES = [
   },
   {
     "id": "citas_nivel2",
-    "titulo": "Citas: Nivel 2 (Filtros Clave & Estilo de Vida)",
+    "titulo": "Citas nivel 2: filtros y estilo de vida",
     "descripcion": "Preguntas directas y sin rodeos: hábitos, futuro, convivencia y qué buscas.",
     "icono": "🔍",
     "color": "#f59e0b",
@@ -442,7 +442,7 @@ export const DEFAULT_CATEGORIES = [
   },
   {
     "id": "citas_nivel3",
-    "titulo": "Citas: Nivel 3 (Química & Conexión Profunda)",
+    "titulo": "Citas nivel 3: química y conexión",
     "descripcion": "Para citas avanzadas, parejas o momentos de máxima confianza.",
     "icono": "❤️",
     "color": "#ec4899",
@@ -552,7 +552,7 @@ export const DEFAULT_CATEGORIES = [
   },
   {
     "id": "amigos_fiesta",
-    "titulo": "Amigos & Fiesta (Modo Carrete)",
+    "titulo": "Amigos y carrete",
     "descripcion": "Confidencias, anécdotas locas y momentos de trágame tierra con el grupo.",
     "icono": "🍻",
     "color": "#a855f7",
@@ -662,7 +662,7 @@ export const DEFAULT_CATEGORIES = [
   },
   {
     "id": "empresas_trabajo",
-    "titulo": "Empresas & Trabajo (Team Building)",
+    "titulo": "Trabajo en equipo",
     "descripcion": "Dinámicas constructivas, romper la formalidad y conocer al equipo humano.",
     "icono": "💼",
     "color": "#10b981",
@@ -782,7 +782,7 @@ export const DEFAULT_CATEGORIES = [
   },
   {
     "id": "quien_es_mas_probable",
-    "titulo": "¿Quién es Más Probable Que...?",
+    "titulo": "¿Quién es más probable?",
     "descripcion": "Cada uno vota en secreto por alguien del grupo y se revela el ranking.",
     "icono": "👉",
     "color": "#6366f1",
