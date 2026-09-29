@@ -704,6 +704,39 @@ function singleGenderWarning(players) {
   return "";
 }
 
+// Tipos de pregunta que el anfitrión puede activar o desactivar en el paso 2
+const QUESTION_TYPES = [
+  { type: "choice", icon: "🅰️", title: "Elegir una opción", desc: "¿Preferirías A o B? y preguntas con alternativas" },
+  { type: "yesno", icon: "🙋", title: "Sí o No", desc: "Cada uno vota en secreto" },
+  { type: "suspect", icon: "👉", title: "Votar por alguien", desc: "¿Quién del grupo...?" },
+  { type: "open", icon: "🎤", title: "Responder en voz alta", desc: "Se sortea a alguien para que responda", duoTitle: "Respuesta escrita", duoDesc: "Cada uno escribe lo que quiera" },
+];
+
+let hostStep = 1;
+let selectedTypes = new Set(QUESTION_TYPES.map((t) => t.type));
+
+// Preguntas disponibles para una dinámica (null si la dinámica no usa el banco de preguntas)
+function dynamicPool(dyn) {
+  if (dyn.mode === "preguntas") return { questions: getCategory(dyn.category).preguntas, category: dyn.category };
+  if (dyn.mode === "duo") return { questions: [...getCategory("citas_nivel1").preguntas, ...getCategory("dilemas_absurdos").preguntas], category: "" };
+  return null;
+}
+
+function typeCounts(dyn) {
+  const pool = dynamicPool(dyn);
+  const counts = {};
+  pool?.questions.forEach((q) => {
+    const t = classifyGroupQuestion(q, pool.category).type;
+    counts[t] = (counts[t] || 0) + 1;
+  });
+  return counts;
+}
+
+function selectedQuestionCount(dyn) {
+  const counts = typeCounts(dyn);
+  return [...selectedTypes].reduce((sum, t) => sum + (counts[t] || 0), 0);
+}
+
 function renderDynamicsGrid() {
   $("dynamics-grid").innerHTML = ROOM_DYNAMICS.map(
     (d) => `
@@ -713,15 +746,42 @@ function renderDynamicsGrid() {
         <small>${d.desc}</small>
       </button>`
   ).join("");
+}
+
+function renderHostStep() {
+  const dyn = getDynamic(selectedDynamicKey);
+  $("host-step-1").hidden = hostStep !== 1;
+  $("host-step-2").hidden = hostStep !== 2;
+  if (hostStep !== 2) return;
+
+  $("selected-dynamic-summary").innerHTML = `<span class="dyn-icon">${dyn.icon}</span><div><strong>${dyn.title}</strong><small>${dyn.desc}</small></div>`;
+
+  const counts = typeCounts(dyn);
+  const available = QUESTION_TYPES.filter((t) => counts[t.type] > 0);
+  $("question-types-box").hidden = available.length === 0;
+  $("question-types-list").innerHTML = available
+    .map((t) => {
+      const on = selectedTypes.has(t.type);
+      const title = dyn.mode === "duo" && t.duoTitle ? t.duoTitle : t.title;
+      const desc = dyn.mode === "duo" && t.duoDesc ? t.duoDesc : t.desc;
+      return `<button type="button" class="type-toggle ${on ? "selected" : ""}" data-type="${t.type}" aria-pressed="${on}">
+        <span class="type-check">${on ? "✓" : ""}</span>
+        <span class="type-icon">${t.icon}</span>
+        <span class="type-text"><strong>${title}</strong><small>${desc}</small></span>
+        <span class="type-count">${counts[t.type]}</span>
+      </button>`;
+    })
+    .join("");
   updateDynamicOptions();
 }
 
 function updateDynamicOptions() {
   const dyn = getDynamic(selectedDynamicKey);
+  const usesTypes = !!dynamicPool(dyn);
   $("opt-reveal-author-row").hidden = !dyn.author;
-  $("opt-reveal-gender-row").hidden = !dyn.gender;
+  $("opt-reveal-gender-row").hidden = !dyn.gender || !selectedTypes.has("yesno");
   const players = roomWatcher ? activePlayers(roomWatcher.players) : [];
-  let warning = dyn.gender && $("chk-reveal-gender").checked ? singleGenderWarning(players) : "";
+  let warning = !$("opt-reveal-gender-row").hidden && $("chk-reveal-gender").checked ? singleGenderWarning(players) : "";
   if (dyn.audience) {
     const outsiders = players.filter((p) => p.gender !== dyn.audience).length;
     if (outsiders > 0) {
@@ -731,6 +791,18 @@ function updateDynamicOptions() {
   }
   $("single-gender-warning-box").hidden = !warning;
   $("lbl-single-gender-desc").textContent = warning;
+
+  // El botón de empezar aparece solo si todos están listos y hay preguntas para jugar
+  const ready = roomWatcher?.room ? lobbyReadiness(roomWatcher) : { allReady: false, readyCount: 0, active: [] };
+  const questionCount = usesTypes ? selectedQuestionCount(dyn) : 1;
+  const canStart = ready.allReady && questionCount > 0;
+  $("btn-start-dynamic").hidden = !canStart;
+  $("btn-start-dynamic").textContent = usesTypes ? `🚀 Empezar para todos (${questionCount} preguntas)` : "🚀 Empezar para todos";
+  $("start-wait-msg").hidden = canStart;
+  $("start-wait-msg").textContent =
+    questionCount === 0 ? "☝️ Marca al menos un tipo de pregunta."
+    : ready.active.length < 2 ? "👥 Se necesitan al menos 2 jugadores para empezar."
+    : `⏳ Esperando que todos estén listos (${ready.readyCount} de ${ready.active.length}).`;
 }
 
 $("dynamics-grid").addEventListener("click", (e) => {
@@ -738,20 +810,42 @@ $("dynamics-grid").addEventListener("click", (e) => {
   if (!card) return;
   selectedDynamicKey = card.dataset.key;
   document.querySelectorAll(".dynamic-card-radio").forEach((c) => c.classList.toggle("selected", c === card));
-  updateDynamicOptions();
+});
+
+$("btn-host-next-step").addEventListener("click", () => {
+  selectedTypes = new Set(QUESTION_TYPES.map((t) => t.type));
+  hostStep = 2;
+  renderHostStep();
+});
+
+$("btn-host-prev-step").addEventListener("click", () => {
+  hostStep = 1;
+  renderHostStep();
+});
+
+$("question-types-list").addEventListener("click", (e) => {
+  const btn = e.target.closest(".type-toggle");
+  if (!btn) return;
+  const t = btn.dataset.type;
+  if (selectedTypes.has(t)) selectedTypes.delete(t);
+  else selectedTypes.add(t);
+  renderHostStep();
 });
 
 $("chk-reveal-gender").addEventListener("change", updateDynamicOptions);
 
 function renderLobby(w) {
-  const { active, readyCount, allReady } = lobbyReadiness(w);
+  const { active, readyCount } = lobbyReadiness(w);
   const host = isHost();
   $("lbl-player-count").textContent = active.length;
   $("room-players-list").innerHTML = playerChipsHtml(active, w.room.hostId, w.room);
   const hostPlayer = w.players.find((p) => p.id === w.room.hostId);
   $("lbl-host-indicator").textContent = host ? "👑 Eres el anfitrión" : `Anfitrión: ${hostPlayer?.name || "..."}`;
-  $("host-game-controls").hidden = !host;
+  $("host-lobby-actions").hidden = !host;
   $("non-host-wait-msg").hidden = host;
+  $("lbl-host-lobby-hint").textContent =
+    active.length < 2 ? "Invita al menos a 1 persona más." : readyCount === active.length ? "✅ Todos listos: elige el juego y empiecen." : "Puedes ir eligiendo el juego mientras el resto marca listo.";
+  $("setup-room-pill").textContent = `👥 Sala ${w.code} · ✅ ${readyCount} de ${active.length} listos`;
 
   $("lbl-ready-status").textContent =
     active.length < 2 ? "👥 Se necesitan al menos 2 jugadores" : `✅ ${readyCount} de ${active.length} listos`;
@@ -763,8 +857,6 @@ function renderLobby(w) {
   readyBtn.textContent = imReady ? "✅ Estoy listo (toca para cancelar)" : "✋ Estoy listo";
   readyBtn.classList.toggle("is-ready", imReady);
 
-  $("btn-start-dynamic").hidden = !allReady;
-  $("start-wait-msg").hidden = allReady;
   if (host) updateDynamicOptions();
 }
 
@@ -785,13 +877,20 @@ function onRoomUpdate(w) {
   renderLobby(w);
   const view = activeViewId();
   if (w.room.state === "playing") {
-    if (view === "view-lobby") switchView("view-game");
+    if (view === "view-lobby" || view === "view-setup") switchView("view-game");
     renderGame(w);
-  } else if (view === "view-game") {
+  } else if (view === "view-game" || (view === "view-setup" && !isHost())) {
     lastPanelKey = null;
     switchView("view-lobby");
   }
 }
+
+$("btn-open-setup").addEventListener("click", () => {
+  switchView("view-setup");
+  renderHostStep();
+});
+
+$("btn-setup-back").addEventListener("click", () => switchView("view-lobby"));
 
 // ---------- Iniciar dinámica (anfitrión) ----------
 function gameResetFields() {
@@ -799,6 +898,11 @@ function gameResetFields() {
     phase: null, round: 0, pos: 0, deck: [], order: [], current: null,
     speaker: null, currentAuthor: null, realIdx: null, category: null,
   };
+}
+
+function filteredDeck(dyn) {
+  const pool = dynamicPool(dyn);
+  return shuffleArray(pool.questions.filter((q) => selectedTypes.has(classifyGroupQuestion(q, pool.category).type)));
 }
 
 function pickSpeaker(players, exceptId) {
@@ -825,16 +929,21 @@ $("btn-start-dynamic").addEventListener("click", async () => {
     settings: {
       revealAuthor: $("chk-reveal-truth").checked,
       revealGender: $("chk-reveal-gender").checked,
+      types: [...selectedTypes],
     },
   };
+  if (dynamicPool(dyn) && selectedQuestionCount(dyn) === 0) {
+    showToast("Marca al menos un tipo de pregunta", "☝️");
+    return;
+  }
 
   if (dyn.mode === "preguntas") {
     fields.category = dyn.category;
-    fields.deck = shuffleArray(getCategory(dyn.category).preguntas);
+    fields.deck = filteredDeck(dyn);
     fields.phase = "vote";
     fields.speaker = pickSpeaker(w.players);
   } else if (dyn.mode === "duo") {
-    fields.deck = shuffleArray([...getCategory("citas_nivel1").preguntas, ...getCategory("dilemas_absurdos").preguntas]);
+    fields.deck = filteredDeck(dyn);
     fields.phase = "answer";
   } else if (dyn.mode === "muro") {
     fields.phase = "wall";
@@ -1120,7 +1229,9 @@ function renderPreguntas(w) {
 
   const myVote = getMyVote(room);
   const votes = w.votes;
-  const showResults = allDone(votes.length, players.length);
+  const everyoneVoted = allDone(votes.length, players.length);
+  // Nada se muestra solo: el anfitrión revela cuando votaron todos
+  const showResults = room.phase === "results";
 
   if (myVote) {
     $("g-vote-area").innerHTML = votedHtml(myVote);
@@ -1155,8 +1266,8 @@ function renderPreguntas(w) {
   }
 
   $("game-host-bar").innerHTML = host
-    ? hostButtons([nextOrSkip(showResults, "next-question", "Siguiente pregunta ➔", "⏭️ Saltar pregunta")])
-    : nonHostNote(showResults ? "Esperando la siguiente pregunta..." : "Los resultados aparecen cuando todos voten.");
+    ? hostButtons([revealOrNext(showResults, everyoneVoted, votes.length, players.length, "show-results", "📊 Mostrar resultados", "next-question", "Siguiente pregunta ➔")])
+    : nonHostNote(showResults ? "Esperando la siguiente pregunta..." : "El anfitrión muestra los resultados cuando todos voten.");
 }
 
 // Los resultados solo se muestran cuando votó cada jugador conectado
@@ -1164,9 +1275,12 @@ function allDone(doneCount, expectedCount) {
   return expectedCount > 0 && doneCount >= expectedCount;
 }
 
-// Antes de que todos terminen, el anfitrión solo puede saltar (sin revelar nada)
-function nextOrSkip(done, action, nextLabel, skipLabel) {
-  return done ? { action, label: nextLabel } : { action, label: skipLabel, cls: "btn-secondary" };
+// Un solo botón para el anfitrión: desactivado mientras falten votos, luego "Mostrar" y después "Siguiente"
+function revealOrNext(shown, everyoneDone, doneCount, expected, revealAction, revealLabel, nextAction, nextLabel) {
+  if (shown) return { action: nextAction, label: nextLabel };
+  return everyoneDone
+    ? { action: revealAction, label: revealLabel, cls: "btn-purple" }
+    : { action: revealAction, label: `⏳ Esperando a todos (${doneCount} de ${expected})`, cls: "btn-purple", disabled: true };
 }
 
 function handleVoteClick(btn) {
@@ -1265,10 +1379,7 @@ function renderConfesiones(w) {
   $("game-host-bar").innerHTML = host
     ? hostButtons(
         !showResults
-          ? [
-              { action: "conf-show-results", label: everyoneVoted ? "📊 Mostrar resultados" : `⏳ Esperando votos (${votes.length} de ${players.length})`, cls: "btn-purple", disabled: !everyoneVoted },
-              { action: "conf-next", label: "⏭️ Saltar confesión", cls: "btn-secondary" },
-            ]
+          ? [revealOrNext(false, everyoneVoted, votes.length, players.length, "conf-show-results", "📊 Mostrar resultados")]
           : [
               ...(reveal && !room.currentAuthor ? [{ action: "conf-reveal", label: "👀 Revelar quién confesó", cls: "btn-purple" }] : []),
               { action: "conf-next", label: isLast ? "Terminar ronda ➔" : "Siguiente confesión ➔" },
@@ -1309,12 +1420,13 @@ function renderTres(w) {
   if (room.phase === "write") {
     $("game-status").textContent = "Paso 1 · Escribe tus 3 afirmaciones";
     const submitted = !!load("session", submissionKey(room));
+    // La tarjeta marcada como verdad queda en verde y las mentiras en rojo
     const statementInput = (i, placeholder) => `
-      <div class="statement-input">
-        <label class="statement-label">
+      <div class="statement-input ${i === 0 ? "is-truth" : "is-lie"}" data-idx="${i}">
+        <div class="statement-label">
           <span>Afirmación ${"ABC"[i]}</span>
-          <span class="real-pick"><input type="radio" name="radio-real-statement" value="${i}" ${i === 0 ? "checked" : ""}> Es la verdad</span>
-        </label>
+          <button type="button" class="truth-toggle" data-action="pick-truth" data-idx="${i}">${i === 0 ? "✅ Verdad" : "❌ Mentira"}</button>
+        </div>
         <input type="text" class="input-field" id="txt-statement-${i}" maxlength="120" placeholder="${placeholder}">
       </div>`;
     ensurePanel(
@@ -1322,7 +1434,7 @@ function renderTres(w) {
       `
       <div class="room-box inner">
         <h3 class="panel-title">2 mentiras y 1 verdad 🎭</h3>
-        <p class="panel-desc">Escribe 3 cosas sobre ti: 2 mentiras creíbles y <strong>1 verdad</strong>. Marca cuál es la verdadera.</p>
+        <p class="panel-desc">Escribe 3 cosas sobre ti: 2 mentiras creíbles y <strong>1 verdad</strong>. Toca el botón de la afirmación que es verdad.</p>
         ${submitted
           ? `<div class="voted-status">✓ Tus afirmaciones están guardadas</div>`
           : `${statementInput(0, "Ej: Me rompí el brazo saltando en paracaídas")}
@@ -1399,10 +1511,7 @@ function renderTres(w) {
     ? hostButtons(
         revealed
           ? [{ action: "tres-next", label: isLast ? "Terminar ➔" : "Siguiente jugador ➔" }]
-          : [
-              { action: "tres-reveal", label: everyoneVoted ? "🎉 Revelar la verdad" : `⏳ Esperando votos (${votes.length} de ${voters.length})`, cls: "btn-purple", disabled: !everyoneVoted },
-              { action: "tres-next", label: "⏭️ Saltar jugador", cls: "btn-secondary" },
-            ]
+          : [revealOrNext(false, everyoneVoted, votes.length, voters.length, "tres-reveal", "🎉 Revelar la verdad")]
       )
     : nonHostNote(revealed ? "Esperando al siguiente jugador..." : "El anfitrión revela la verdad cuando todos voten.");
 }
@@ -1415,7 +1524,7 @@ async function submitTres() {
     showToast("Completa las 3 afirmaciones", "⚠️");
     return;
   }
-  const realIdx = parseInt(document.querySelector('input[name="radio-real-statement"]:checked')?.value || "0", 10);
+  const realIdx = parseInt(document.querySelector(".statement-input.is-truth")?.dataset.idx || "0", 10);
   try {
     await setDoc(doc(db, "salas", w.code, `s_${room.gameId}`, profile.playerId), {
       name: profile.name,
@@ -1430,6 +1539,16 @@ async function submitTres() {
   } catch (err) {
     showToast("No se pudo guardar: " + friendlyError(err), "❌");
   }
+}
+
+function pickTruth(btn) {
+  const idx = btn.dataset.idx;
+  document.querySelectorAll(".statement-input[data-idx]").forEach((card) => {
+    const isTruth = card.dataset.idx === idx;
+    card.classList.toggle("is-truth", isTruth);
+    card.classList.toggle("is-lie", !isTruth);
+    card.querySelector(".truth-toggle").textContent = isTruth ? "✅ Verdad" : "❌ Mentira";
+  });
 }
 
 function tresCurrentFor(sub) {
@@ -1484,7 +1603,8 @@ function renderDuo(w) {
   const info = classifyGroupQuestion(question);
   const answered = !!load("session", duoAnswerKey(room));
   const answers = w.answers;
-  const revealed = players.length >= 2 && allDone(answers.length, players.length);
+  const everyoneAnswered = allDone(answers.length, players.length);
+  const revealed = room.phase === "reveal";
   const options = duoAnswerOptions(info, players);
 
   $("game-status").textContent = `Pregunta ${room.pos + 1} de ${room.deck.length}`;
@@ -1511,8 +1631,8 @@ function renderDuo(w) {
   if (revealed) $("g-results").innerHTML = duoRevealHtml(answers, info);
 
   $("game-host-bar").innerHTML = isHost()
-    ? hostButtons([nextOrSkip(revealed, "duo-next", "Siguiente pregunta ➔", "⏭️ Saltar pregunta")])
-    : nonHostNote(revealed ? "El anfitrión pasa a la siguiente pregunta." : "Las respuestas se revelan cuando todos respondan.");
+    ? hostButtons([revealOrNext(revealed, everyoneAnswered, answers.length, players.length, "duo-reveal", "👀 Revelar respuestas", "duo-next", "Siguiente pregunta ➔")])
+    : nonHostNote(revealed ? "El anfitrión pasa a la siguiente pregunta." : "El anfitrión revela las respuestas cuando todos respondan.");
 }
 
 async function submitDuo(presetAnswer) {
@@ -1628,6 +1748,18 @@ const HOST_ACTIONS = {
     });
   },
 
+  "show-results": () => {
+    const w = roomWatcher;
+    if (!allDone(w.votes.length, activePlayers(w.players).length)) return;
+    return hostUpdate({ phase: "results" });
+  },
+
+  "duo-reveal": () => {
+    const w = roomWatcher;
+    if (!allDone(w.answers.length, activePlayers(w.players).length)) return;
+    return hostUpdate({ phase: "reveal" });
+  },
+
   "conf-show-results": () => {
     const w = roomWatcher;
     if (!allDone(w.votes.length, activePlayers(w.players).length)) return;
@@ -1708,8 +1840,8 @@ $("game-panel").addEventListener("click", (e) => {
   }
   const actionBtn = e.target.closest("[data-action]");
   if (!actionBtn) return;
-  const actions = { "submit-confession": submitConfession, "submit-tres": submitTres, "submit-duo": submitDuo, "post-muro": postMuroNote };
-  actions[actionBtn.dataset.action]?.();
+  const actions = { "submit-confession": submitConfession, "submit-tres": submitTres, "submit-duo": () => submitDuo(), "post-muro": postMuroNote, "pick-truth": pickTruth };
+  actions[actionBtn.dataset.action]?.(actionBtn);
 });
 
 $("game-panel").addEventListener("keydown", (e) => {
@@ -1844,7 +1976,7 @@ function renderTvRoom(w) {
       results.innerHTML = room.speaker ? `<div class="results-headline">🎤 Responde: ${room.speaker.avatar} ${escapeHtml(room.speaker.name)}</div>` : "";
       return;
     }
-    const showResults = allDone(w.votes.length, players.length);
+    const showResults = room.phase === "results";
     if (!showResults) {
       results.innerHTML = `<div class="results-headline">🗳️ ${w.votes.length} de ${players.length} votaron</div>`;
     } else if (w.votes.length) {
@@ -1882,7 +2014,7 @@ function renderTvRoom(w) {
   } else if (room.mode === "duo") {
     const question = room.deck[room.pos] || "";
     headline.textContent = questionText(question);
-    const revealed = players.length >= 2 && allDone(w.answers.length, players.length);
+    const revealed = room.phase === "reveal";
     results.innerHTML = revealed
       ? duoRevealHtml(w.answers, classifyGroupQuestion(question))
       : `<div class="results-headline">🔐 ${w.answers.length} de ${players.length} respondieron</div>`;
@@ -2095,6 +2227,7 @@ async function restoreRoomFromUrlOrSession() {
 initParticles();
 setupProfilePickers();
 renderDynamicsGrid();
+renderHostStep();
 renderSoloCategories();
 setupTvCategoryBar();
 restoreRoomFromUrlOrSession();

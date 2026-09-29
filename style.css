@@ -1361,29 +1361,54 @@ select.input-field { cursor: pointer; }
 /* 2 mentiras y 1 verdad */
 .statement-input {
   background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
+  border: 2px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 12px;
   margin-bottom: 12px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.statement-input.is-truth {
+  border-color: var(--emerald);
+  background: var(--emerald-soft);
+}
+
+.statement-input.is-lie {
+  border-color: rgba(251, 113, 133, 0.6);
+  background: var(--coral-soft);
 }
 
 .statement-label {
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-
-.real-pick {
-  color: var(--emerald);
-  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  cursor: pointer;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 8px;
 }
 
-.real-pick input { accent-color: var(--emerald); }
+.truth-toggle {
+  font-size: 14px;
+  font-weight: 800;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  border: 2px solid;
+  min-width: 120px;
+}
+
+.is-truth .truth-toggle {
+  background: var(--emerald);
+  border-color: var(--emerald);
+  color: #04221a;
+}
+
+.is-lie .truth-toggle {
+  background: transparent;
+  border-color: rgba(251, 113, 133, 0.7);
+  color: #fecdd3;
+}
 
 .statement-list {
   display: flex;
@@ -1405,9 +1430,86 @@ select.input-field { cursor: pointer; }
 }
 
 .statement-result.is-true { border-color: var(--emerald); background: var(--emerald-soft); }
-.statement-result.is-false { opacity: 0.6; }
+.statement-result.is-false { border-color: rgba(251, 113, 133, 0.6); background: var(--coral-soft); }
+.statement-result.is-false .statement-meta { color: var(--coral); }
 .statement-meta { font-size: 12.5px; font-weight: 800; color: var(--text-muted); }
 .statement-result.is-true .statement-meta { color: var(--emerald); }
+
+/* Elegir juego: resumen y tipos de pregunta */
+.selected-dynamic {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--purple-soft);
+  border: 1.5px solid rgba(168, 85, 247, 0.4);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+
+.selected-dynamic strong { display: block; font-size: 15px; }
+.selected-dynamic small { color: var(--text-muted); font-size: 12.5px; }
+
+.type-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.type-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-surface-elevated);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.type-toggle.selected {
+  border-color: var(--purple);
+  background: var(--purple-soft);
+  color: var(--text-main);
+}
+
+.type-check {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 2px solid var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 14px;
+}
+
+.type-toggle.selected .type-check {
+  background: var(--purple);
+  border-color: var(--purple);
+  color: #fff;
+}
+
+.type-icon { font-size: 22px; }
+.type-text { flex: 1; }
+.type-text strong { display: block; font-size: 14px; }
+.type-text small { font-size: 12px; color: var(--text-muted); }
+
+.type-count {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#view-setup .room-box { max-width: 640px; }
 
 /* Respuestas en sincronía */
 .answers-grid {

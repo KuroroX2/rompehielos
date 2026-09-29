@@ -220,34 +220,9 @@
         </div>
 
         <!-- Controles del anfitrión -->
-        <div id="host-game-controls" class="section-block" hidden>
-          <h4 class="block-title">🎮 Elige la dinámica</h4>
-          <p class="panel-desc left">Todos los celulares de la sala cambian a la dinámica al mismo tiempo.</p>
-
-          <div class="dynamics-grid" id="dynamics-grid"></div>
-
-          <div class="switch-row" id="opt-reveal-author-row">
-            <label for="chk-reveal-truth">
-              <strong>Revelar quién escribió cada confesión</strong>
-              <small>Si lo desactivas, las confesiones son 100% anónimas.</small>
-            </label>
-            <input type="checkbox" id="chk-reveal-truth" checked>
-          </div>
-
-          <div class="switch-row" id="opt-reveal-gender-row">
-            <label for="chk-reveal-gender">
-              <strong>🚻 Mostrar resultados por género</strong>
-              <small>Si lo desactivas, solo se ve el total del grupo.</small>
-            </label>
-            <input type="checkbox" id="chk-reveal-gender" checked>
-          </div>
-
-          <div class="notice notice-warn" id="single-gender-warning-box" hidden>
-            ⚠️ <span id="lbl-single-gender-desc"></span>
-          </div>
-
-          <button type="button" class="btn btn-purple btn-block" id="btn-start-dynamic" hidden>🚀 Empezar para todos</button>
-          <div class="waiting compact" id="start-wait-msg">⏳ El botón para empezar aparece cuando todos marquen que están listos.</div>
+        <div id="host-lobby-actions" class="section-block" hidden>
+          <button type="button" class="btn btn-purple btn-block" id="btn-open-setup">🎮 Elegir juego ➔</button>
+          <p class="muted-small center" id="lbl-host-lobby-hint"></p>
         </div>
 
         <div id="non-host-wait-msg" class="waiting" hidden>
@@ -256,6 +231,60 @@
         </div>
 
         <button type="button" class="btn btn-ghost btn-block" id="btn-leave-room">Salir de la sala</button>
+      </div>
+    </section>
+
+    <!-- ========== SALAS: ELEGIR JUEGO (solo anfitrión) ========== -->
+    <section id="view-setup" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-setup-back">← Sala de espera</button>
+        <span class="turn-pill pill-purple" id="setup-room-pill">👥 Sala</span>
+      </div>
+      <div class="room-box" id="host-game-controls">
+          <!-- Paso 1: qué dinámica -->
+          <div id="host-step-1">
+            <h4 class="block-title">🎮 Paso 1 · Elige la dinámica</h4>
+            <p class="panel-desc left">Todos los celulares de la sala cambian a la dinámica al mismo tiempo.</p>
+            <div class="dynamics-grid" id="dynamics-grid"></div>
+            <button type="button" class="btn btn-purple btn-block" id="btn-host-next-step">Siguiente ➔</button>
+          </div>
+
+          <!-- Paso 2: cómo jugarla -->
+          <div id="host-step-2" hidden>
+            <div class="row-between">
+              <h4 class="block-title">⚙️ Paso 2 · ¿Cómo quieren jugar?</h4>
+              <button type="button" class="back-btn" id="btn-host-prev-step">← Cambiar</button>
+            </div>
+            <div class="selected-dynamic" id="selected-dynamic-summary"></div>
+
+            <div id="question-types-box">
+              <span class="field-label">Tipos de pregunta (marca los que quieran)</span>
+              <div class="type-toggle-list" id="question-types-list"></div>
+            </div>
+
+            <div class="switch-row" id="opt-reveal-author-row">
+              <label for="chk-reveal-truth">
+                <strong>Revelar quién escribió cada confesión</strong>
+                <small>Si lo desactivas, las confesiones son 100% anónimas.</small>
+              </label>
+              <input type="checkbox" id="chk-reveal-truth" checked>
+            </div>
+
+            <div class="switch-row" id="opt-reveal-gender-row">
+              <label for="chk-reveal-gender">
+                <strong>🚻 Mostrar resultados por género</strong>
+                <small>En las preguntas de Sí o No. Si lo desactivas, solo se ve el total.</small>
+              </label>
+              <input type="checkbox" id="chk-reveal-gender" checked>
+            </div>
+
+            <div class="notice notice-warn" id="single-gender-warning-box" hidden>
+              ⚠️ <span id="lbl-single-gender-desc"></span>
+            </div>
+
+            <button type="button" class="btn btn-purple btn-block" id="btn-start-dynamic" hidden>🚀 Empezar para todos</button>
+            <div class="waiting compact" id="start-wait-msg"></div>
+          </div>
       </div>
     </section>
 
@@ -305,7 +334,7 @@
               <div class="join-row narrow">
                 <input type="text" class="input-field code-input" id="input-tv-room-code" placeholder="CÓDIGO" maxlength="8" autocomplete="off">
                 <button type="button" class="btn btn-purple" id="btn-tv-watch-room">Proyectar</button>
-              </div>
+      </div>
             </div>
             <div id="tv-room-live" hidden>
               <div class="eyebrow" id="tv-live-status"></div>
