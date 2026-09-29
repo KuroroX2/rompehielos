@@ -475,14 +475,21 @@ function generateRoomCode() {
   return code;
 }
 
+// merge: al recargar la página se conservan "listo" y "ya votó", y el orden de llegada
 async function writePlayerDoc(code) {
-  await setDoc(doc(db, "salas", code, "players", profile.playerId), {
-    name: profile.name,
-    avatar: profile.avatar,
-    gender: profile.gender,
-    joinedAt: Date.now(),
-    lastSeen: Date.now(),
-  });
+  const ref = doc(db, "salas", code, "players", profile.playerId);
+  const existing = await getDoc(ref);
+  await setDoc(
+    ref,
+    {
+      name: profile.name,
+      avatar: profile.avatar,
+      gender: profile.gender,
+      lastSeen: Date.now(),
+      ...(existing.exists() ? {} : { joinedAt: Date.now() }),
+    },
+    { merge: true }
+  );
 }
 
 // ---------- Crear, unirse, salir ----------
@@ -497,6 +504,7 @@ $("btn-create-room").addEventListener("click", async () => {
       code,
       hostId: profile.playerId,
       state: "lobby",
+      lobbyId: randomId(6),
       createdAt: serverTimestamp(),
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     });
@@ -655,14 +663,31 @@ $("btn-lobby-tv-shortcut").addEventListener("click", () => {
 });
 
 // ---------- Sala de espera ----------
-function playerChipsHtml(players, hostId) {
+// Cada vuelta a la sala de espera tiene un id nuevo; un jugador está listo si marcó ese id.
+// Al empezar una dinámica el id cambia, así que al volver todos deben marcar "listo" otra vez.
+function lobbyKey(room) {
+  return room?.lobbyId || "inicio";
+}
+
+function isReady(player, room) {
+  return player.id === room.hostId || player.readyFor === lobbyKey(room);
+}
+
+function playerChipsHtml(players, hostId, room = null) {
   return players
-    .map(
-      (p) => `<div class="player-chip ${p.id === hostId ? "is-host" : ""}">
-        <span>${p.avatar || "👤"}</span><span>${escapeHtml(p.name)}</span>${p.id === hostId ? " 👑" : ""}
-      </div>`
-    )
+    .map((p) => {
+      const readyMark = room ? (isReady(p, room) ? " ✅" : " ⏳") : "";
+      return `<div class="player-chip ${p.id === hostId ? "is-host" : ""}">
+        <span>${p.avatar || "👤"}</span><span>${escapeHtml(p.name)}</span>${p.id === hostId ? " 👑" : readyMark}
+      </div>`;
+    })
     .join("");
+}
+
+function lobbyReadiness(w) {
+  const active = activePlayers(w.players);
+  const readyCount = active.filter((p) => isReady(p, w.room)).length;
+  return { active, readyCount, allReady: active.length >= 2 && readyCount === active.length };
 }
 
 function genderCounts(players) {
@@ -719,16 +744,41 @@ $("dynamics-grid").addEventListener("click", (e) => {
 $("chk-reveal-gender").addEventListener("change", updateDynamicOptions);
 
 function renderLobby(w) {
-  const active = activePlayers(w.players);
+  const { active, readyCount, allReady } = lobbyReadiness(w);
   const host = isHost();
   $("lbl-player-count").textContent = active.length;
-  $("room-players-list").innerHTML = playerChipsHtml(active, w.room.hostId);
+  $("room-players-list").innerHTML = playerChipsHtml(active, w.room.hostId, w.room);
   const hostPlayer = w.players.find((p) => p.id === w.room.hostId);
   $("lbl-host-indicator").textContent = host ? "👑 Eres el anfitrión" : `Anfitrión: ${hostPlayer?.name || "..."}`;
   $("host-game-controls").hidden = !host;
   $("non-host-wait-msg").hidden = host;
+
+  $("lbl-ready-status").textContent =
+    active.length < 2 ? "👥 Se necesitan al menos 2 jugadores" : `✅ ${readyCount} de ${active.length} listos`;
+
+  const me = w.players.find((p) => p.id === profile.playerId);
+  const imReady = me ? isReady(me, w.room) : false;
+  const readyBtn = $("btn-toggle-ready");
+  readyBtn.hidden = host;
+  readyBtn.textContent = imReady ? "✅ Estoy listo (toca para cancelar)" : "✋ Estoy listo";
+  readyBtn.classList.toggle("is-ready", imReady);
+
+  $("btn-start-dynamic").hidden = !allReady;
+  $("start-wait-msg").hidden = allReady;
   if (host) updateDynamicOptions();
 }
+
+$("btn-toggle-ready").addEventListener("click", async () => {
+  const w = roomWatcher;
+  if (!w?.room) return;
+  const me = w.players.find((p) => p.id === profile.playerId);
+  const imReady = me ? isReady(me, w.room) : false;
+  try {
+    await updateDoc(doc(db, "salas", w.code, "players", profile.playerId), { readyFor: imReady ? null : lobbyKey(w.room) });
+  } catch (err) {
+    showToast("No se pudo actualizar: " + friendlyError(err), "❌");
+  }
+});
 
 function onRoomUpdate(w) {
   if (!w.room) return;
@@ -760,9 +810,14 @@ function pickSpeaker(players, exceptId) {
 $("btn-start-dynamic").addEventListener("click", async () => {
   const w = roomWatcher;
   if (!w || !isHost()) return;
+  if (!lobbyReadiness(w).allReady) {
+    showToast("Todavía hay jugadores que no están listos", "⏳");
+    return;
+  }
   const dyn = getDynamic(selectedDynamicKey);
   const fields = {
     ...gameResetFields(),
+    lobbyId: randomId(6),
     state: "playing",
     mode: dyn.mode,
     dynamicKey: dyn.key,
@@ -820,6 +875,7 @@ async function castVote(value, label, extra = {}) {
   renderGame(w);
   try {
     await setDoc(doc(db, "salas", w.code, `v_${room.gameId}_${room.round}`, token), { value, ...extra });
+    markStepDone();
   } catch (err) {
     unstore("session", voteStorageKey(room));
     renderGame(w);
@@ -959,6 +1015,45 @@ function renderGame(w) {
 
   const renderers = { preguntas: renderPreguntas, confesiones: renderConfesiones, tres: renderTres, duo: renderDuo, muro: renderMuro };
   renderers[room.mode]?.(w);
+  $("game-player-status").innerHTML = playerStatusHtml(w);
+}
+
+// ---------- Estados por jugador ("Juan votó", "Vale envió") ----------
+// Cada jugador marca en su documento el paso que ya completó. Solo dice QUE participó, nunca QUÉ eligió.
+function currentStep(room) {
+  if (!room || room.state !== "playing") return null;
+  const g = room.gameId;
+  if (room.mode === "preguntas") {
+    const info = classifyGroupQuestion(room.deck[room.pos], room.category);
+    return info.type === "open" ? null : { key: `${g}:${room.round}`, verb: "votó" };
+  }
+  if (room.mode === "confesiones" || room.mode === "tres") {
+    if (room.phase === "write") return { key: `${g}:write`, verb: room.mode === "tres" ? "está listo" : "envió" };
+    if (room.phase === "end") return null;
+    return { key: `${g}:${room.round}`, verb: "votó", exceptId: room.mode === "tres" ? room.current?.playerId : null };
+  }
+  if (room.mode === "duo") return { key: `${g}:${room.round}`, verb: "respondió" };
+  return null;
+}
+
+function playerStatusHtml(w) {
+  const step = currentStep(w.room);
+  if (!step) return "";
+  const players = activePlayers(w.players);
+  const chips = players
+    .map((p) => {
+      if (p.id === step.exceptId) return `<span class="status-chip is-turn">🎭 ${escapeHtml(p.name)} (su turno)</span>`;
+      const done = p.doneFor === step.key;
+      return `<span class="status-chip ${done ? "is-done" : ""}">${done ? "✅" : "⏳"} ${escapeHtml(p.name)}${done ? ` ${step.verb}` : ""}</span>`;
+    })
+    .join("");
+  return `<div class="status-chips">${chips}</div>`;
+}
+
+function markStepDone() {
+  const step = currentStep(roomWatcher?.room);
+  if (!step) return;
+  updateDoc(doc(db, "salas", roomWatcher.code, "players", profile.playerId), { doneFor: step.key }).catch(() => {});
 }
 
 // Reconstruye el panel solo cuando cambia la fase o la ronda, así no se borra lo que alguien está escribiendo
@@ -1025,7 +1120,7 @@ function renderPreguntas(w) {
 
   const myVote = getMyVote(room);
   const votes = w.votes;
-  const showResults = room.phase === "results" || (players.length > 0 && votes.length >= players.length);
+  const showResults = allDone(votes.length, players.length);
 
   if (myVote) {
     $("g-vote-area").innerHTML = votedHtml(myVote);
@@ -1060,11 +1155,18 @@ function renderPreguntas(w) {
   }
 
   $("game-host-bar").innerHTML = host
-    ? hostButtons([
-        ...(showResults ? [] : [{ action: "show-results", label: "📊 Mostrar resultados", cls: "btn-secondary" }]),
-        { action: "next-question", label: "Siguiente pregunta ➔" },
-      ])
+    ? hostButtons([nextOrSkip(showResults, "next-question", "Siguiente pregunta ➔", "⏭️ Saltar pregunta")])
     : nonHostNote(showResults ? "Esperando la siguiente pregunta..." : "Los resultados aparecen cuando todos voten.");
+}
+
+// Los resultados solo se muestran cuando votó cada jugador conectado
+function allDone(doneCount, expectedCount) {
+  return expectedCount > 0 && doneCount >= expectedCount;
+}
+
+// Antes de que todos terminen, el anfitrión solo puede saltar (sin revelar nada)
+function nextOrSkip(done, action, nextLabel, skipLabel) {
+  return done ? { action, label: nextLabel } : { action, label: skipLabel, cls: "btn-secondary" };
 }
 
 function handleVoteClick(btn) {
@@ -1112,9 +1214,10 @@ function renderConfesiones(w) {
         <div class="progress-line" id="g-progress"></div>
       </div>`
     );
+    const everyoneSent = allDone(w.subs.length, players.length);
     $("g-progress").textContent = `✍️ ${w.subs.length} de ${players.length} ya enviaron`;
     $("game-host-bar").innerHTML = host
-      ? hostButtons([{ action: "conf-start-vote", label: `🗳️ Empezar votación (${w.subs.length})`, disabled: w.subs.length === 0 }])
+      ? hostButtons([{ action: "conf-start-vote", label: everyoneSent ? "🗳️ Empezar votación" : `⏳ Esperando confesiones (${w.subs.length} de ${players.length})`, disabled: !everyoneSent }])
       : nonHostNote("Cuando todos envíen, el anfitrión empieza la votación.");
     return;
   }
@@ -1140,7 +1243,9 @@ function renderConfesiones(w) {
 
   const votes = w.votes;
   const myVote = getMyVote(room);
-  const showResults = room.phase === "results" || (players.length > 0 && votes.length >= players.length);
+  const everyoneVoted = allDone(votes.length, players.length);
+  // Los resultados aparecen en todos los celulares a la vez, cuando el anfitrión los muestra
+  const showResults = room.phase === "results";
 
   if (myVote) $("g-vote-area").innerHTML = votedHtml(myVote);
   else if (!showResults)
@@ -1158,12 +1263,18 @@ function renderConfesiones(w) {
 
   const isLast = room.pos + 1 >= room.order.length;
   $("game-host-bar").innerHTML = host
-    ? hostButtons([
-        ...(!showResults ? [{ action: "show-results", label: "📊 Mostrar resultados", cls: "btn-secondary" }] : []),
-        ...(showResults && reveal && !room.currentAuthor ? [{ action: "conf-reveal", label: "👀 Revelar autor", cls: "btn-purple" }] : []),
-        { action: "conf-next", label: isLast ? "Terminar ronda ➔" : "Siguiente confesión ➔" },
-      ])
-    : nonHostNote(showResults ? "Esperando al anfitrión..." : "Los resultados aparecen cuando todos voten.");
+    ? hostButtons(
+        !showResults
+          ? [
+              { action: "conf-show-results", label: everyoneVoted ? "📊 Mostrar resultados" : `⏳ Esperando votos (${votes.length} de ${players.length})`, cls: "btn-purple", disabled: !everyoneVoted },
+              { action: "conf-next", label: "⏭️ Saltar confesión", cls: "btn-secondary" },
+            ]
+          : [
+              ...(reveal && !room.currentAuthor ? [{ action: "conf-reveal", label: "👀 Revelar quién confesó", cls: "btn-purple" }] : []),
+              { action: "conf-next", label: isLast ? "Terminar ronda ➔" : "Siguiente confesión ➔" },
+            ]
+      )
+    : nonHostNote(showResults ? "Esperando al anfitrión..." : "El anfitrión muestra los resultados cuando todos voten.");
 }
 
 async function submitConfession() {
@@ -1181,6 +1292,7 @@ async function submitConfession() {
   try {
     await setDoc(doc(db, "salas", w.code, `s_${room.gameId}`, docId), data);
     store("session", submissionKey(room), "1");
+    markStepDone();
     renderGame(w);
     showToast("Confesión enviada", "🔒");
   } catch (err) {
@@ -1220,9 +1332,10 @@ function renderTres(w) {
         <div class="progress-line" id="g-progress"></div>
       </div>`
     );
+    const everyoneWrote = allDone(w.subs.length, players.length);
     $("g-progress").textContent = `✍️ ${w.subs.length} de ${players.length} están listos`;
     $("game-host-bar").innerHTML = host
-      ? hostButtons([{ action: "tres-start-vote", label: `🎯 Empezar a adivinar (${w.subs.length})`, disabled: w.subs.length === 0 }])
+      ? hostButtons([{ action: "tres-start-vote", label: everyoneWrote ? "🎯 Empezar a adivinar" : `⏳ Esperando a todos (${w.subs.length} de ${players.length})`, disabled: !everyoneWrote }])
       : nonHostNote("Cuando todos estén listos, el anfitrión empieza.");
     return;
   }
@@ -1281,11 +1394,15 @@ function renderTres(w) {
   $("g-progress").textContent = revealed ? "" : `🗳️ ${votes.length} de ${voters.length} votaron`;
 
   const isLast = room.pos + 1 >= room.order.length;
+  const everyoneVoted = voters.length === 0 || allDone(votes.length, voters.length);
   $("game-host-bar").innerHTML = host
     ? hostButtons(
         revealed
           ? [{ action: "tres-next", label: isLast ? "Terminar ➔" : "Siguiente jugador ➔" }]
-          : [{ action: "tres-reveal", label: "🎉 Revelar la verdad", cls: "btn-purple" }]
+          : [
+              { action: "tres-reveal", label: everyoneVoted ? "🎉 Revelar la verdad" : `⏳ Esperando votos (${votes.length} de ${voters.length})`, cls: "btn-purple", disabled: !everyoneVoted },
+              { action: "tres-next", label: "⏭️ Saltar jugador", cls: "btn-secondary" },
+            ]
       )
     : nonHostNote(revealed ? "Esperando al siguiente jugador..." : "El anfitrión revela la verdad cuando todos voten.");
 }
@@ -1307,6 +1424,7 @@ async function submitTres() {
       realIdx,
     });
     store("session", submissionKey(room), "1");
+    markStepDone();
     renderGame(w);
     showToast("Afirmaciones guardadas", "🎭");
   } catch (err) {
@@ -1323,24 +1441,65 @@ function duoAnswerKey(room) {
   return `rh_d_${roomWatcher.code}_${room.gameId}_${room.round}`;
 }
 
+// Opciones para responder: solo las preguntas abiertas llevan texto libre
+function duoAnswerOptions(info, players) {
+  if (info.type === "yesno") return info.labels.map((label, i) => ({ label, cls: `big ${i === 0 ? "yes" : "no"}`, html: label }));
+  if (info.type === "choice") {
+    const cls = info.options.length > 2 ? "option compact" : "option";
+    return info.options.map((opt, i) => ({ label: opt, cls, html: `<span class="opt-letter">${optionLetter(i)}</span> ${escapeHtml(opt)}` }));
+  }
+  if (info.type === "suspect") return players.map((p) => ({ label: p.name, cls: "", html: `<span class="vote-avatar">${p.avatar || "👤"}</span> ${escapeHtml(p.name)}` }));
+  return null;
+}
+
+function duoRevealHtml(answers, info) {
+  if (answers.length === 0) return `<p class="muted-small center">Nadie respondió esta pregunta.</p>`;
+  if (info.type === "open") {
+    return `<div class="answers-grid">${answers
+      .map((a) => `<div class="answer-card"><span class="eyebrow">${a.avatar || "👤"} ${escapeHtml(a.name)}</span><p>${escapeHtml(a.answer)}</p></div>`)
+      .join("")}</div>`;
+  }
+  // Con alternativas se agrupa quién eligió qué, para ver en qué coinciden
+  const groups = new Map();
+  answers.forEach((a) => groups.set(a.answer, [...(groups.get(a.answer) || []), a]));
+  const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+  const headline = sorted.length === 1 ? "💯 ¡Todos respondieron lo mismo!" : `🔀 ${sorted.length} respuestas distintas`;
+  return `
+    <div class="results-headline">${headline}</div>
+    <div class="results-bars-list">
+      ${sorted
+        .map(([answer, people]) => `
+          <div class="result-row">
+            <div class="result-row-head"><span>${escapeHtml(answer)}</span><strong>${people.length} de ${answers.length}</strong></div>
+            <div class="answer-people">${people.map((p) => `<span class="player-chip">${p.avatar || "👤"} ${escapeHtml(p.name)}</span>`).join("")}</div>
+          </div>`)
+        .join("")}
+    </div>`;
+}
+
 function renderDuo(w) {
   const room = w.room;
   const players = activePlayers(w.players);
   const question = room.deck[room.pos] || "";
+  const info = classifyGroupQuestion(question);
   const answered = !!load("session", duoAnswerKey(room));
   const answers = w.answers;
-  const revealed = room.phase === "reveal" || (players.length >= 2 && answers.length >= players.length);
+  const revealed = players.length >= 2 && allDone(answers.length, players.length);
+  const options = duoAnswerOptions(info, players);
 
   $("game-status").textContent = `Pregunta ${room.pos + 1} de ${room.deck.length}`;
   ensurePanel(
-    `duo|${room.gameId}|${room.round}|${answered}|${revealed}`,
+    `duo|${room.gameId}|${room.round}|${answered}|${revealed}|${info.type === "suspect" ? players.length : ""}`,
     `
     <div class="question-hero">
       <span class="type-badge">⚡ Todos responden en secreto</span>
-      <p class="question-hero-text">${escapeHtml(question)}</p>
+      <p class="question-hero-text">${escapeHtml(questionText(question))}</p>
     </div>
     ${revealed ? `<div id="g-results"></div>`
       : answered ? `<div class="waiting"><div class="waiting-icon">🔐</div><p>Respuesta guardada. Se revelan todas cuando el resto termine.</p></div>`
+      : options ? `<div class="voting-options-grid">${options
+          .map((o) => `<button type="button" class="vote-btn ${o.cls}" data-duo="${escapeAttr(o.label)}">${o.html}</button>`)
+          .join("")}</div>`
       : `<div class="join-row">
            <input type="text" class="input-field" id="txt-duo-answer" maxlength="120" placeholder="Tu respuesta...">
            <button type="button" class="btn btn-purple" data-action="submit-duo">🔒 Listo</button>
@@ -1349,26 +1508,17 @@ function renderDuo(w) {
   );
 
   $("g-progress").textContent = revealed ? "" : `🔐 ${answers.length} de ${players.length} respondieron`;
-  if (revealed) {
-    $("g-results").innerHTML = answers.length
-      ? `<div class="answers-grid">${answers
-          .map((a) => `<div class="answer-card"><span class="eyebrow">${a.avatar || "👤"} ${escapeHtml(a.name)}</span><p>${escapeHtml(a.answer)}</p></div>`)
-          .join("")}</div>`
-      : `<p class="muted-small center">Nadie respondió esta pregunta.</p>`;
-  }
+  if (revealed) $("g-results").innerHTML = duoRevealHtml(answers, info);
 
   $("game-host-bar").innerHTML = isHost()
-    ? hostButtons([
-        ...(revealed ? [] : [{ action: "duo-reveal", label: "👀 Revelar ya", cls: "btn-secondary" }]),
-        { action: "duo-next", label: "Siguiente pregunta ➔" },
-      ])
-    : nonHostNote("El anfitrión pasa a la siguiente pregunta.");
+    ? hostButtons([nextOrSkip(revealed, "duo-next", "Siguiente pregunta ➔", "⏭️ Saltar pregunta")])
+    : nonHostNote(revealed ? "El anfitrión pasa a la siguiente pregunta." : "Las respuestas se revelan cuando todos respondan.");
 }
 
-async function submitDuo() {
+async function submitDuo(presetAnswer) {
   const w = roomWatcher;
   const room = w.room;
-  const answer = $("txt-duo-answer")?.value.trim();
+  const answer = typeof presetAnswer === "string" ? presetAnswer : $("txt-duo-answer")?.value.trim();
   if (!answer) {
     showToast("Escribe tu respuesta primero", "✍️");
     return;
@@ -1380,6 +1530,7 @@ async function submitDuo() {
       answer,
     });
     store("session", duoAnswerKey(room), "1");
+    markStepDone();
     renderGame(w);
   } catch (err) {
     showToast("No se pudo enviar: " + friendlyError(err), "❌");
@@ -1452,8 +1603,6 @@ function renderEndPanel(w, title, restartAction) {
 
 // ---------- Acciones del anfitrión ----------
 const HOST_ACTIONS = {
-  "show-results": () => hostUpdate({ phase: "results" }),
-
   "next-question": () => {
     const r = roomWatcher.room;
     return hostUpdate({
@@ -1479,10 +1628,16 @@ const HOST_ACTIONS = {
     });
   },
 
+  "conf-show-results": () => {
+    const w = roomWatcher;
+    if (!allDone(w.votes.length, activePlayers(w.players).length)) return;
+    return hostUpdate({ phase: "results" });
+  },
+
   "conf-reveal": () => {
     const r = roomWatcher.room;
     const sub = roomWatcher.subs.find((s) => s.id === r.order[r.pos]);
-    return hostUpdate({ phase: "results", currentAuthor: sub?.authorName || "Anónimo" });
+    return hostUpdate({ currentAuthor: sub?.authorName || "Anónimo" });
   },
 
   "conf-next": () => {
@@ -1525,8 +1680,6 @@ const HOST_ACTIONS = {
 
   "tres-restart": () => hostUpdate({ ...gameResetFields(), phase: "write", gameId: randomId(6) }),
 
-  "duo-reveal": () => hostUpdate({ phase: "reveal" }),
-
   "duo-next": () => {
     const r = roomWatcher.room;
     return hostUpdate({ pos: (r.pos + 1) % r.deck.length, round: r.round + 1, phase: "answer" });
@@ -1546,6 +1699,11 @@ $("game-panel").addEventListener("click", (e) => {
   const voteBtn = e.target.closest(".vote-btn[data-vote]");
   if (voteBtn) {
     handleVoteClick(voteBtn);
+    return;
+  }
+  const duoBtn = e.target.closest(".vote-btn[data-duo]");
+  if (duoBtn) {
+    submitDuo(duoBtn.dataset.duo);
     return;
   }
   const actionBtn = e.target.closest("[data-action]");
@@ -1662,7 +1820,8 @@ function renderTvRoom(w) {
   const room = w.room;
   if (!room) return;
   const players = activePlayers(w.players);
-  $("tv-players-list").innerHTML = playerChipsHtml(players, room.hostId);
+  // En la sala de espera se ve quién está listo; durante la dinámica, quién ya participó
+  $("tv-players-list").innerHTML = room.state === "playing" && currentStep(room) ? playerStatusHtml(w) : playerChipsHtml(players, room.hostId, room.state === "playing" ? null : room);
   const status = $("tv-live-status");
   const headline = $("tv-main-headline");
   const results = $("tv-live-results");
@@ -1685,7 +1844,7 @@ function renderTvRoom(w) {
       results.innerHTML = room.speaker ? `<div class="results-headline">🎤 Responde: ${room.speaker.avatar} ${escapeHtml(room.speaker.name)}</div>` : "";
       return;
     }
-    const showResults = room.phase === "results" || (players.length > 0 && w.votes.length >= players.length);
+    const showResults = allDone(w.votes.length, players.length);
     if (!showResults) {
       results.innerHTML = `<div class="results-headline">🗳️ ${w.votes.length} de ${players.length} votaron</div>`;
     } else if (w.votes.length) {
@@ -1702,7 +1861,7 @@ function renderTvRoom(w) {
       headline.textContent = "¡Se acabaron las confesiones! 🎉";
     } else {
       headline.textContent = `"${room.current?.text || ""}"`;
-      const showResults = room.phase === "results" || w.votes.length >= players.length;
+      const showResults = room.phase === "results";
       results.innerHTML = showResults && w.votes.length ? `<div class="results-box">${suspectResultsHtml(w.votes, w.players)}</div>` : `<div class="results-headline">🗳️ ${w.votes.length} de ${players.length} votaron</div>`;
       if (room.currentAuthor) results.innerHTML += `<div class="author-reveal"><span class="eyebrow">💥 Era de</span><div class="speaker-name">${escapeHtml(room.currentAuthor)}</div></div>`;
     }
@@ -1721,10 +1880,11 @@ function renderTvRoom(w) {
         .join("")}</div>`;
     }
   } else if (room.mode === "duo") {
-    headline.textContent = room.deck[room.pos] || "";
-    const revealed = room.phase === "reveal" || (players.length >= 2 && w.answers.length >= players.length);
+    const question = room.deck[room.pos] || "";
+    headline.textContent = questionText(question);
+    const revealed = players.length >= 2 && allDone(w.answers.length, players.length);
     results.innerHTML = revealed
-      ? `<div class="answers-grid">${w.answers.map((a) => `<div class="answer-card"><span class="eyebrow">${a.avatar || "👤"} ${escapeHtml(a.name)}</span><p>${escapeHtml(a.answer)}</p></div>`).join("")}</div>`
+      ? duoRevealHtml(w.answers, classifyGroupQuestion(question))
       : `<div class="results-headline">🔐 ${w.answers.length} de ${players.length} respondieron</div>`;
   } else if (room.mode === "muro") {
     headline.textContent = "Muro anónimo 🧱";

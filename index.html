@@ -215,6 +215,8 @@
             <span class="muted-small" id="lbl-host-indicator"></span>
           </div>
           <div class="players-pill-list" id="room-players-list"></div>
+          <p class="progress-line" id="lbl-ready-status"></p>
+          <button type="button" class="btn btn-block ready-btn" id="btn-toggle-ready" hidden>✋ Estoy listo</button>
         </div>
 
         <!-- Controles del anfitrión -->
@@ -244,12 +246,13 @@
             ⚠️ <span id="lbl-single-gender-desc"></span>
           </div>
 
-          <button type="button" class="btn btn-purple btn-block" id="btn-start-dynamic">🚀 Empezar para todos</button>
+          <button type="button" class="btn btn-purple btn-block" id="btn-start-dynamic" hidden>🚀 Empezar para todos</button>
+          <div class="waiting compact" id="start-wait-msg">⏳ El botón para empezar aparece cuando todos marquen que están listos.</div>
         </div>
 
         <div id="non-host-wait-msg" class="waiting" hidden>
           <div class="waiting-icon">⏳</div>
-          <p>Esperando que el anfitrión elija la dinámica...</p>
+          <p>Marca que estás listo y espera a que el anfitrión elija la dinámica.</p>
         </div>
 
         <button type="button" class="btn btn-ghost btn-block" id="btn-leave-room">Salir de la sala</button>
@@ -265,6 +268,7 @@
       <div class="game-dynamic-box">
         <div class="eyebrow center" id="game-status"></div>
         <div id="game-panel"></div>
+        <div id="game-player-status"></div>
         <div class="host-bar" id="game-host-bar"></div>
       </div>
     </section>
