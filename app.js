@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20260930115102";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20260930115102";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20260930115102";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20260930115102";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20260930115102";
+import { firebaseConfig } from "./firebase-config.js?v=20260930121011";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20260930121011";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20260930121011";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20260930121011";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20260930121011";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -595,6 +595,10 @@ async function joinRoom(rawCode, { silent = false } = {}) {
       if (!silent) showToast(`La sala ${code} no existe o ya se cerró`, "❌");
       return false;
     }
+    if (wasKicked(snap.data())) {
+      showToast(`El anfitrión te sacó de la sala ${code}`, "🚪");
+      return false;
+    }
     await writePlayerDoc(code);
     enterRoom(code);
     if (!silent) showToast(`Entraste a la sala ${code}`, "🚀");
@@ -686,6 +690,33 @@ function maybeClaimHost() {
     .then(() => message && showToast(message, "👑"))
     .catch(() => {})
     .finally(() => { hostClaimPending = false; });
+}
+
+// ---------- Expulsar (solo el anfitrión) ----------
+// Se borra al jugador y se anota en la lista de expulsados para que no pueda volver a entrar a esta sala
+async function kickPlayer(playerId, name) {
+  const w = roomWatcher;
+  if (!w || !isHost() || playerId === profile.playerId) return;
+  if (!confirm(`¿Expulsar a ${name} de la sala?`)) return;
+  try {
+    const kicked = [...new Set([...(w.room.kicked || []), playerId])];
+    const fields = { kicked };
+    if (w.room.ownerId === playerId) fields.ownerId = profile.playerId;
+    await updateDoc(roomRef(w.code), fields);
+    await deleteDoc(doc(db, "salas", w.code, "players", playerId));
+    showToast(`${name} fue expulsado/a de la sala`, "🚪");
+  } catch (err) {
+    showToast("No se pudo expulsar: " + friendlyError(err), "❌");
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-kick]");
+  if (chip) kickPlayer(chip.dataset.kick, chip.dataset.kickName);
+});
+
+function wasKicked(room) {
+  return (room?.kicked || []).includes(profile.playerId);
 }
 
 async function leaveRoom() {
@@ -780,10 +811,12 @@ function isReady(player, room) {
 }
 
 function playerChipsHtml(players, hostId, room = null) {
+  const canKick = isHost();
   return players
     .map((p) => {
       const readyMark = room ? (isReady(p, room) ? " ✅" : " ⏳") : "";
-      return `<div class="player-chip ${p.id === hostId ? "is-host" : ""}">
+      const kickable = canKick && p.id !== profile.playerId;
+      return `<div class="player-chip ${p.id === hostId ? "is-host" : ""} ${kickable ? "kickable" : ""}" ${kickable ? `data-kick="${escapeAttr(p.id)}" data-kick-name="${escapeAttr(p.name)}" role="button" title="Tocar para expulsar"` : ""}>
         <span>${p.avatar || "👤"}</span><span>${escapeHtml(p.name)}</span>${p.id === hostId ? " 👑" : ""}${readyMark}
       </div>`;
     })
@@ -1019,7 +1052,8 @@ function renderLobby(w) {
   $("setup-room-pill").textContent = `👥 Sala ${w.code} · ✅ ${readyCount} de ${active.length} listos`;
 
   $("lbl-ready-status").textContent =
-    active.length < 2 ? "👥 Se necesitan al menos 2 jugadores" : `✅ ${readyCount} de ${active.length} listos`;
+    (active.length < 2 ? "👥 Se necesitan al menos 2 jugadores" : `✅ ${readyCount} de ${active.length} listos`) +
+    (host && active.length > 1 ? " · Toca a alguien para expulsarlo" : "");
 
   const me = w.players.find((p) => p.id === profile.playerId);
   const imReady = me ? isReady(me, w.room) : false;
@@ -1047,6 +1081,12 @@ $("btn-toggle-ready").addEventListener("click", async () => {
 
 function onRoomUpdate(w) {
   if (!w.room) return;
+  if (wasKicked(w.room)) {
+    showToast("El anfitrión te sacó de la sala", "🚪");
+    resetRoomUi();
+    switchView("view-lobby");
+    return;
+  }
   maybeClaimHost();
   renderLobby(w);
   const view = activeViewId();
@@ -1466,9 +1506,10 @@ function playerStatusHtml(w) {
   const players = activePlayers(w.players);
   const chips = players
     .map((p) => {
-      if (p.id === step.exceptId) return `<span class="status-chip is-turn">🎭 ${escapeHtml(p.name)} (su turno)</span>`;
+      const kick = isHost() && p.id !== profile.playerId ? `data-kick="${escapeAttr(p.id)}" data-kick-name="${escapeAttr(p.name)}" role="button" title="Tocar para expulsar"` : "";
+      if (p.id === step.exceptId) return `<span class="status-chip is-turn ${kick ? "kickable" : ""}" ${kick}>🎭 ${escapeHtml(p.name)} (su turno)</span>`;
       const done = p.doneFor === step.key;
-      return `<span class="status-chip ${done ? "is-done" : ""}">${done ? "✅" : "⏳"} ${escapeHtml(p.name)}${done ? ` ${step.verb}` : ""}</span>`;
+      return `<span class="status-chip ${done ? "is-done" : ""} ${kick ? "kickable" : ""}" ${kick}>${done ? "✅" : "⏳"} ${escapeHtml(p.name)}${done ? ` ${step.verb}` : ""}</span>`;
     })
     .join("");
   return `<div class="status-chips">${chips}</div>`;
@@ -1571,13 +1612,10 @@ function renderPreguntas(w) {
     $("g-progress").textContent = `🗳️ ${votes.length} de ${players.length} votaron`;
     $("g-results").innerHTML = "";
     const nextStep = guessOn && spec
-      ? { action: "to-guess", label: "🎯 ¡A adivinar!", cls: "btn-purple" }
-      : { action: "show-results", label: "📊 Mostrar resultados", cls: "btn-purple" };
+      ? { action: "to-guess", label: "🎯 ¡A adivinar!" }
+      : { action: "show-results", label: "📊 Mostrar resultados" };
     $("game-host-bar").innerHTML = host
-      ? hostButtons([
-          everyoneVoted ? nextStep : { ...nextStep, label: `⏳ Esperando a todos (${votes.length} de ${players.length})`, disabled: true },
-          SKIP_BUTTON,
-        ])
+      ? hostButtons([waitingButton(everyoneVoted, votes.length, players.length, nextStep.action, nextStep.label, room), SKIP_BUTTON])
       : nonHostNote("Cuando todos voten, el anfitrión sigue.");
     return;
   }
@@ -1596,12 +1634,7 @@ function renderPreguntas(w) {
     $("g-results").innerHTML = "";
     const allGuessed = allDone(guesses, players.length);
     $("game-host-bar").innerHTML = host
-      ? hostButtons([
-          allGuessed
-            ? { action: "show-results", label: "📊 Mostrar resultados", cls: "btn-purple" }
-            : { action: "show-results", label: `⏳ Esperando apuestas (${guesses} de ${players.length})`, cls: "btn-purple", disabled: true },
-          SKIP_BUTTON,
-        ])
+      ? hostButtons([waitingButton(allGuessed, guesses, players.length, "show-results", "📊 Mostrar resultados", room), SKIP_BUTTON])
       : nonHostNote("Cuando todos apuesten, el anfitrión muestra los resultados.");
     return;
   }
@@ -1632,12 +1665,46 @@ function allDone(doneCount, expectedCount) {
 // Saltar pasa a la siguiente pregunta sin mostrar nada de la actual (preguntas incómodas o aburridas)
 const SKIP_BUTTON = { action: "next-question", label: "⏭️ Saltar", cls: "btn-secondary btn-skip" };
 
-// Un solo botón para el anfitrión: desactivado mientras falten votos, luego "Mostrar" y después "Siguiente"
+// Si alguien no vota (fue al baño, se distrajo), a los 10 segundos el anfitrión puede seguir igual.
+// El tiempo se mide en el celular del anfitrión desde que ve la pregunta, así no depende de relojes ajenos.
+const FORCE_AFTER_MS = 10000;
+const phaseSeenAt = new Map();
+const rerenderTimers = new Set();
+
+function phaseKey(room) {
+  return `${room.gameId}|${room.round}|${room.phase}|${room.pos}`;
+}
+
+function canForce(room) {
+  const key = phaseKey(room);
+  if (!phaseSeenAt.has(key)) phaseSeenAt.set(key, Date.now());
+  const elapsed = Date.now() - phaseSeenAt.get(key);
+  if (elapsed >= FORCE_AFTER_MS) return true;
+  if (!rerenderTimers.has(key)) {
+    rerenderTimers.add(key);
+    setTimeout(() => roomWatcher && renderGame(roomWatcher), FORCE_AFTER_MS - elapsed + 100);
+  }
+  return false;
+}
+
+function doneOrForced(doneCount, expected) {
+  return allDone(doneCount, expected) || (!!roomWatcher?.room && canForce(roomWatcher.room));
+}
+
+// Botón del anfitrión: desactivado mientras falten votos; a los 10 s se puede mostrar igual
+function waitingButton(everyoneDone, doneCount, expected, action, label, room) {
+  if (everyoneDone) return { action, label, cls: "btn-purple" };
+  if (room && canForce(room)) {
+    const missing = expected - doneCount;
+    return { action, label: `${label} (${missing === 1 ? "falta 1" : `faltan ${missing}`})`, cls: "btn-purple" };
+  }
+  return { action, label: `⏳ Esperando a todos (${doneCount} de ${expected})`, cls: "btn-purple", disabled: true };
+}
+
+// Un solo botón para el anfitrión: "Mostrar" cuando votan todos (o pasados 10 s) y después "Siguiente"
 function revealOrNext(shown, everyoneDone, doneCount, expected, revealAction, revealLabel, nextAction, nextLabel) {
   if (shown) return { action: nextAction, label: nextLabel };
-  return everyoneDone
-    ? { action: revealAction, label: revealLabel, cls: "btn-purple" }
-    : { action: revealAction, label: `⏳ Esperando a todos (${doneCount} de ${expected})`, cls: "btn-purple", disabled: true };
+  return waitingButton(everyoneDone, doneCount, expected, revealAction, revealLabel, roomWatcher?.room);
 }
 
 function handleVoteClick(btn) {
@@ -2375,7 +2442,7 @@ const HOST_ACTIONS = {
 
   "to-guess": () => {
     const w = roomWatcher;
-    if (!allDone(w.votes.length, activePlayers(w.players).length)) return;
+    if (!doneOrForced(w.votes.length, activePlayers(w.players).length)) return;
     return hostUpdate({ phase: "guess" });
   },
 
@@ -2383,9 +2450,11 @@ const HOST_ACTIONS = {
     const w = roomWatcher;
     const r = w.room;
     const players = activePlayers(w.players);
-    if (!allDone(w.votes.length, players.length)) return;
-    if (r.phase !== "guess") return hostUpdate({ phase: "results" });
-    if (!allDone(w.guesses.length, players.length)) return;
+    if (r.phase !== "guess") {
+      if (!doneOrForced(w.votes.length, players.length)) return;
+      return hostUpdate({ phase: "results" });
+    }
+    if (!doneOrForced(w.guesses.length, players.length)) return;
 
     // Se calcula quién acertó y se suma al ranking de la partida
     const info = classifyGroupQuestion(r.deck[r.pos], r.category);
@@ -2402,13 +2471,13 @@ const HOST_ACTIONS = {
 
   "duo-reveal": () => {
     const w = roomWatcher;
-    if (!allDone(w.answers.length, activePlayers(w.players).length)) return;
+    if (!doneOrForced(w.answers.length, activePlayers(w.players).length)) return;
     return hostUpdate({ phase: "reveal" });
   },
 
   "conf-show-results": () => {
     const w = roomWatcher;
-    if (!allDone(w.votes.length, activePlayers(w.players).length)) return;
+    if (!doneOrForced(w.votes.length, activePlayers(w.players).length)) return;
     return hostUpdate({ phase: "results" });
   },
 

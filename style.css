@@ -2125,3 +2125,7 @@ select.input-field { cursor: pointer; }
   background: linear-gradient(160deg, var(--lvl-bg) 0%, transparent 80%);
   padding: 24px 16px;
 }
+
+/* Jugadores que el anfitrión puede tocar para expulsar */
+.kickable { cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
+.kickable:hover { border-color: var(--coral); background: var(--coral-soft); }
