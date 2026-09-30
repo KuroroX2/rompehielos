@@ -5,18 +5,32 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'kurorox2@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    // Cambios del admin al banco de preguntas: todos los leen, solo el admin escribe
+    match /configuracion/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Salas en vivo: cualquiera con el código puede jugar (no hay login).
     match /salas/{code} {
       allow read: if true;
       allow create, update: if code.matches('^[A-Z0-9]{4,8}$');
       allow delete: if false;
 
-      // players, votos (v_*), confesiones (s_*), respuestas (d_*) y muro
+      // players, votos (v_*), confesiones (s_*), respuestas (d_*), adivinanzas (g_*),
+      // "para cada persona" (a_*) y muro
       match /{subcollection}/{docId} {
         allow read: if true;
         allow delete: if true;
         allow create, update: if code.matches('^[A-Z0-9]{4,8}$')
           && request.resource.data.get('text', '').size() <= 300
+          && request.resource.data.get('extra', '').size() <= 300
           && request.resource.data.get('answer', '').size() <= 200
           && request.resource.data.get('name', '').size() <= 40;
       }

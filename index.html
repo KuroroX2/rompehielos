@@ -257,26 +257,7 @@
             </div>
             <div class="selected-dynamic" id="selected-dynamic-summary"></div>
 
-            <div id="question-types-box">
-              <span class="field-label">Tipos de pregunta (marca los que quieran)</span>
-              <div class="type-toggle-list" id="question-types-list"></div>
-            </div>
-
-            <div class="switch-row" id="opt-reveal-author-row">
-              <label for="chk-reveal-truth">
-                <strong>Revelar quién escribió cada confesión</strong>
-                <small>Si lo desactivas, las confesiones son 100% anónimas.</small>
-              </label>
-              <input type="checkbox" id="chk-reveal-truth" checked>
-            </div>
-
-            <div class="switch-row" id="opt-reveal-gender-row">
-              <label for="chk-reveal-gender">
-                <strong>🚻 Mostrar resultados por género</strong>
-                <small>En las preguntas de Sí o No. Si lo desactivas, solo se ve el total.</small>
-              </label>
-              <input type="checkbox" id="chk-reveal-gender" checked>
-            </div>
+            <div id="step2-content"></div>
 
             <div class="notice notice-warn" id="single-gender-warning-box" hidden>
               ⚠️ <span id="lbl-single-gender-desc"></span>
@@ -369,36 +350,60 @@
       </div>
 
       <div id="admin-login-box">
-        <p class="panel-desc left">Ingresa tus credenciales para agregar, editar o eliminar preguntas.</p>
-        <div class="stack">
-          <input type="text" class="input-field" id="admin-user-input" placeholder="Usuario" autocomplete="username">
-          <input type="password" class="input-field" id="admin-pass-input" placeholder="Contraseña" autocomplete="current-password">
-          <button type="button" class="btn btn-primary btn-block" id="btn-admin-login">Entrar</button>
+        <p class="panel-desc left">Inicia sesión con la cuenta de administrador para agregar, editar o eliminar preguntas. Los cambios se aplican para todos.</p>
+        <button type="button" class="btn btn-primary btn-block" id="btn-admin-login">Iniciar sesión con Google</button>
+        <div class="notice notice-warn" id="admin-not-allowed" hidden>
+          La cuenta <strong id="lbl-admin-denied-email"></strong> no es administradora.
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-admin-switch">Usar otra cuenta</button>
         </div>
       </div>
 
       <div id="admin-panel-box" hidden>
-        <div class="notice notice-info">
-          Los cambios se guardan solo en <strong>este dispositivo</strong>. Para publicarlos para todos, usa "Exportar JS" y sube el archivo <code>questions-data.js</code> al repositorio.
-        </div>
-        <div class="row-wrap">
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-admin-export-code">💾 Exportar JS</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-admin-restore-defaults">🔄 Restaurar oficiales</button>
-          <button type="button" class="btn btn-danger btn-sm" id="btn-admin-logout">Salir</button>
+        <div class="row-between admin-session">
+          <span class="muted-small">✓ Sesión: <strong id="lbl-admin-email"></strong> · los cambios son para todos</span>
+          <button type="button" class="btn btn-danger btn-xs" id="btn-admin-logout">Salir</button>
         </div>
 
         <label class="field-label" for="admin-select-category">Categoría</label>
         <select id="admin-select-category" class="input-field"></select>
 
-        <label class="field-label" for="admin-input-new-question">Agregar pregunta</label>
-        <div class="join-row">
-          <input type="text" class="input-field" id="admin-input-new-question" placeholder="Escribe la nueva pregunta..." maxlength="300">
-          <button type="button" class="btn btn-primary" id="btn-admin-add-question">Agregar</button>
+        <!-- Formulario para agregar o editar -->
+        <div class="admin-form" id="admin-form">
+          <span class="field-label" id="lbl-admin-form-title">➕ Agregar pregunta</span>
+          <textarea class="input-field" id="admin-q-text" rows="2" maxlength="300" placeholder="Escribe la pregunta..."></textarea>
+          <div class="admin-form-grid" id="admin-18-fields">
+            <label>Formato
+              <select class="input-field" id="admin-q-fmt">
+                <option value="exp">🔥 Experiencia (3 opciones)</option>
+                <option value="conf">🙊 Confesión (Me ha pasado / Nunca)</option>
+                <option value="gusto">💭 Gusto (opciones propias)</option>
+              </select>
+            </label>
+            <label>Nivel
+              <select class="input-field" id="admin-q-lvl"></select>
+            </label>
+            <label>Tema
+              <select class="input-field" id="admin-q-tema"></select>
+            </label>
+          </div>
+          <input type="text" class="input-field" id="admin-q-opts" maxlength="300" placeholder="Opciones separadas por | (ej: Prendidas | Apagadas | Media luz)">
+          <p class="muted-small" id="admin-form-hint">💡 Para elegir entre varias opciones en las salas, agrégalas al final entre corchetes: <code>¿Qué miras primero? [Ojos | Sonrisa | Manos]</code></p>
+          <div class="row-wrap">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-admin-save-question">Agregar</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-admin-cancel-edit" hidden>Cancelar</button>
+          </div>
         </div>
-        <p class="muted-small">💡 Para que en las salas se elija entre varias opciones, agrégalas al final entre corchetes: <code>¿Qué miras primero? [Ojos | Sonrisa | Manos]</code></p>
 
+        <!-- Filtros y lista -->
+        <div class="admin-filters">
+          <input type="search" class="input-field" id="admin-filter-text" placeholder="🔎 Buscar...">
+          <select class="input-field" id="admin-filter-lvl"></select>
+          <select class="input-field" id="admin-filter-tema"></select>
+        </div>
         <h4 class="block-title">Preguntas (<span id="admin-questions-count">0</span>)</h4>
         <div id="admin-questions-list" class="admin-list"></div>
+
+        <button type="button" class="btn btn-ghost btn-block" id="btn-admin-restore-defaults">🔄 Deshacer todos los cambios y volver a las preguntas oficiales</button>
       </div>
     </div>
   </div>

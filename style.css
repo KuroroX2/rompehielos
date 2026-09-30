@@ -1805,3 +1805,249 @@ select.input-field { cursor: pointer; }
   .tv-code-value { font-size: 28px; }
   .card-actions-bar .btn { flex: 1; padding: 12px 10px; font-size: 14px; }
 }
+
+/* ========== Experiencia (+18) y Adivina cuántos ========== */
+.vote-btn.exp-0 { border-color: rgba(16, 185, 129, 0.5); background: var(--emerald-soft); }
+.vote-btn.exp-1 { border-color: rgba(245, 158, 11, 0.5); background: var(--amber-soft); }
+.vote-btn.exp-2 { border-color: rgba(251, 113, 133, 0.5); background: var(--coral-soft); }
+.vote-btn.exp-0, .vote-btn.exp-1, .vote-btn.exp-2 { justify-content: center; font-size: 16px; padding: 16px 12px; }
+
+.result-track.stacked { display: flex; }
+.result-track.stacked > div { height: 100%; transition: width 0.8s ease; }
+
+.guess-prompt {
+  text-align: center;
+  font-weight: 800;
+  font-size: 16px;
+  margin: 12px 0 4px;
+}
+
+.voting-options-grid.numbers {
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+}
+
+.vote-btn.number {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 900;
+  padding: 12px 0;
+}
+
+.guess-outcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  background: var(--purple-soft);
+  border: 1.5px solid rgba(168, 85, 247, 0.45);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.guess-outcome strong { font-size: 18px; }
+.guess-outcome span { color: var(--purple-light); font-weight: 700; font-size: 14px; }
+
+.ranking {
+  text-align: center;
+  font-size: 13px;
+  color: var(--amber-light);
+  margin: 8px 0 0;
+}
+
+/* ========== Para cada persona ========== */
+.persona-block {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.persona-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+
+.persona-field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: 8px 0 4px;
+}
+
+.persona-block textarea.input-field { margin-bottom: 0; }
+.join-row.tight { margin-top: 0; }
+
+.cartel-grid,
+.cartel-reveal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cartel-reveal { justify-content: center; margin: 12px 0; }
+
+.cartel-chip {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-subtle);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cartel-chip:hover:not(:disabled) { border-color: var(--purple); }
+
+.cartel-chip.selected {
+  background: var(--purple);
+  border-color: var(--purple);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.4);
+}
+
+.cartel-chip:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.cartel-chip.big {
+  font-size: 17px;
+  padding: 12px 18px;
+  background: var(--purple-soft);
+  border-color: rgba(168, 85, 247, 0.5);
+  cursor: default;
+}
+
+.persona-hero {
+  text-align: center;
+  background: linear-gradient(145deg, #1b243b 0%, #101626 100%);
+  border: 1.5px solid rgba(168, 85, 247, 0.45);
+  border-radius: var(--radius-xl);
+  padding: 22px 18px;
+  margin-bottom: 12px;
+}
+
+.persona-hero.is-me { border-color: var(--amber); }
+.persona-hero.is-me p { color: var(--amber-light); font-weight: 800; margin-top: 4px; }
+
+.gift-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.gift-card {
+  position: relative;
+  background: var(--bg-surface-elevated);
+  border: 1.5px solid rgba(56, 189, 248, 0.35);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font-size: 16px;
+  line-height: 1.45;
+  animation: popIn 0.3s ease;
+  --rot: 0deg;
+}
+
+.gift-card strong { display: block; font-size: 17px; }
+.gift-card p { color: var(--text-main); }
+.gift-card strong + p { color: var(--text-muted); margin-top: 4px; font-size: 14.5px; }
+
+.gift-card.is-hidden {
+  color: var(--text-dim);
+  font-style: italic;
+  border-style: dashed;
+  border-color: var(--border-subtle);
+}
+
+.gift-hide {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.gift-hide:hover { color: var(--coral); border-color: var(--coral); }
+
+/* ========== Admin con Google ========== */
+.admin-session { margin: 4px 0 8px; }
+
+.admin-form {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin: 14px 0;
+}
+
+.admin-form .field-label { margin-top: 0; }
+.admin-form textarea.input-field { margin-bottom: 8px; }
+.admin-form > .input-field { margin-bottom: 8px; }
+
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.admin-form-grid label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-form-grid .input-field,
+.admin-filters .input-field {
+  padding: 9px 10px;
+  font-size: 14px;
+}
+
+.admin-filters {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px;
+}
+
+.admin-list-item { align-items: flex-start; }
+.admin-text { display: flex; flex-direction: column; gap: 6px; }
+
+.admin-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.admin-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-muted);
+}
+
+.admin-badge.is-new { background: var(--emerald-soft); color: var(--emerald-light); }
+.admin-badge.is-edited { background: var(--amber-soft); color: var(--amber-light); }
+
+.admin-list { max-height: 420px; }
+
+@media (max-width: 640px) {
+  .admin-filters { grid-template-columns: 1fr 1fr; }
+  .admin-filters input { grid-column: 1 / -1; }
+}

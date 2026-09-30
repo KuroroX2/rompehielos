@@ -1,8 +1,11 @@
 // app.js - Lógica principal de RompeHielos
 import { firebaseConfig } from "./firebase-config.js";
 import { DEFAULT_CATEGORIES } from "./questions-data.js";
-import { classifyGroupQuestion, isChoiceQuestion, questionText } from "./question-types.js";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   getFirestore,
   collection,
@@ -19,37 +22,50 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-const db = getFirestore(initializeApp(firebaseConfig));
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const auth = getAuth(firebaseApp);
 
 // ==========================================
-// 1. BANCO DE PREGUNTAS (oficial + ediciones locales del admin)
+// 1. BANCO DE PREGUNTAS (oficial + cambios del admin en la nube)
 // ==========================================
-const STORAGE_KEY_CATEGORIES = "rompehielos_categories_v3";
-["rompehielos_custom_categories_v2"].forEach((oldKey) => {
+// El banco oficial vive en questions-data.js. Lo que el admin cambia desde la web se guarda en
+// Firestore (configuracion/banco) como una lista de cambios: borradas, editadas y agregadas.
+// Así, cuando se suman preguntas oficiales nuevas al código, igual aparecen para todos.
+const ADMIN_EMAIL = "kurorox2@gmail.com";
+const BANK_DOC = doc(db, "configuracion", "banco");
+const EMPTY_PATCH = () => ({ deleted: [], edits: {}, added: {} });
+
+let bankPatch = EMPTY_PATCH();
+let categories = buildCategories(bankPatch);
+
+["rompehielos_custom_categories_v2", "rompehielos_categories_v3"].forEach((oldKey) => {
   try { localStorage.removeItem(oldKey); } catch {}
 });
 
-let categories = loadStoredCategories();
-
-function loadStoredCategories() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY_CATEGORIES) || "null");
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      // Las ediciones del admin se conservan, pero las categorías oficiales nuevas también aparecen
-      const ids = new Set(parsed.map((c) => c.id));
-      return [...parsed, ...structuredClone(DEFAULT_CATEGORIES.filter((c) => !ids.has(c.id)))];
-    }
-  } catch {}
-  return structuredClone(DEFAULT_CATEGORIES);
+function buildCategories(patch) {
+  const deleted = new Set(patch.deleted || []);
+  return DEFAULT_CATEGORIES.map((cat) => {
+    const base = cat.preguntas
+      .filter((q) => !deleted.has(questionId(cat.id, q)))
+      .map((q) => patch.edits?.[questionId(cat.id, q)] || q);
+    const added = (patch.added?.[cat.id] || []).filter((q) => !deleted.has(q.id));
+    return { ...cat, preguntas: [...base, ...added] };
+  });
 }
 
-function saveCategories(cats) {
-  categories = cats;
-  try {
-    localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(cats));
-  } catch (e) {
-    showToast("No se pudo guardar en este dispositivo", "⚠️");
-  }
+function subscribeToBank() {
+  onSnapshot(
+    BANK_DOC,
+    (snap) => {
+      bankPatch = snap.exists() ? { ...EMPTY_PATCH(), ...snap.data() } : EMPTY_PATCH();
+      categories = buildCategories(bankPatch);
+      renderSoloCategories();
+      if (isAdminUser()) renderAdminQuestionsList();
+      if (activeViewId() === "view-setup") renderHostStep();
+    },
+    (err) => console.warn("No se pudo leer el banco de preguntas en la nube:", err)
+  );
 }
 
 function getCategory(id) {
@@ -252,7 +268,7 @@ function updateSoloCard() {
   $("solo-cat-badge").textContent = `${cat.icono || ""} ${cat.titulo}`;
   $("solo-cat-badge").style.color = cat.color || "var(--cyan)";
   $("solo-counter").textContent = `${solo.index + 1} / ${total}`;
-  $("solo-question-text").textContent = question;
+  $("solo-question-text").textContent = questionText(question);
   $("lbl-table-mode-text").textContent = solo.tableMode ? "Giro: sí" : "Giro: no";
 }
 
@@ -299,12 +315,13 @@ const STALE_MS = 75000;
 
 const ROOM_DYNAMICS = [
   { key: "quien_es_mas_probable", mode: "preguntas", category: "quien_es_mas_probable", icon: "👉", title: "¿Quién es más probable?", desc: "Cada uno vota por alguien del grupo y se revela el ranking." },
-  { key: "secretos_intimos", mode: "preguntas", category: "secretos_intimos", icon: "🔥", title: "Secretos íntimos (+18)", desc: "Afirmaciones picantes: cada uno vota Sí o No en secreto.", gender: true },
+  { key: "secretos_intimos", mode: "preguntas", category: "secretos_intimos", icon: "🔥", title: "Secretos íntimos (+18)", desc: "Por niveles y temas: lo has hecho, te gustaría o no. Todo en secreto.", gender: true },
   { key: "dilemas_absurdos", mode: "preguntas", category: "dilemas_absurdos", icon: "🤯", title: "Dilemas absurdos", desc: "Votan A o B, Sí o No, o a alguien le toca responder.", gender: true },
   { key: "amigos_fiesta", mode: "preguntas", category: "amigos_fiesta", icon: "🍻", title: "Amigos y carrete", desc: "Anécdotas, votaciones y confesiones para el grupo.", gender: true },
   { key: "empresas_trabajo", mode: "preguntas", category: "empresas_trabajo", icon: "💼", title: "Trabajo en equipo", desc: "Para conocer al equipo: rondas de respuesta y votaciones.", gender: true },
   { key: "reunion_hombres", mode: "preguntas", category: "reunion_hombres", icon: "🍺", title: "Junta de hombres", desc: "Solo para hombres: qué miran primero, quién es el más mandado y más.", audience: "hombre" },
   { key: "reunion_mujeres", mode: "preguntas", category: "reunion_mujeres", icon: "🥂", title: "Junta de mujeres", desc: "Solo para mujeres: qué miran primero, quién stalkea mejor y más.", audience: "mujer" },
+  { key: "persona", mode: "persona", icon: "🎁", title: "Para cada persona", desc: "Carteles, profesiones, regalos y agradecimientos para cada uno, en anónimo." },
   { key: "confesiones", mode: "confesiones", icon: "🕵️", title: "Confesiones anónimas", desc: "Cada uno escribe una confesión y el grupo adivina de quién es.", author: true },
   { key: "tres", mode: "tres", icon: "🎭", title: "2 mentiras y 1 verdad", desc: "Cada uno escribe 3 afirmaciones y el resto adivina la real." },
   { key: "duo", mode: "duo", icon: "⚡", title: "Respuestas en sincronía", desc: "Todos responden la misma pregunta en secreto y se revelan juntas." },
@@ -350,7 +367,7 @@ function friendlyError(err) {
 // ---------- Observador de una sala (lo usan los jugadores y el Modo TV) ----------
 function createRoomWatcher(code, onUpdate, onMissing) {
   const w = {
-    code, room: null, players: [], votes: [], subs: [], answers: [], muro: [],
+    code, room: null, players: [], votes: [], subs: [], answers: [], muro: [], guesses: [], gifts: [],
     roundKey: null, gameKey: null, unsubs: [], roundUnsubs: [], gameUnsubs: [],
   };
 
@@ -377,8 +394,10 @@ function createRoomWatcher(code, onUpdate, onMissing) {
       w.gameUnsubs = [];
       w.subs = [];
       w.muro = [];
+      w.gifts = [];
       w.gameKey = gameKey;
       if (playing && (r.mode === "confesiones" || r.mode === "tres")) listen(`s_${r.gameId}`, "subs", w.gameUnsubs);
+      if (playing && r.mode === "persona") listen(`a_${r.gameId}`, "gifts", w.gameUnsubs);
       if (playing && r.mode === "muro") {
         w.gameUnsubs.push(
           onSnapshot(query(collection(db, "salas", code, "muro"), orderBy("createdAt", "desc"), limit(80)), (snap) => {
@@ -393,9 +412,11 @@ function createRoomWatcher(code, onUpdate, onMissing) {
       w.roundUnsubs.forEach((u) => u());
       w.roundUnsubs = [];
       w.votes = [];
+      w.guesses = [];
       w.answers = [];
       w.roundKey = roundKey;
       if (playing && ["preguntas", "confesiones", "tres"].includes(r.mode)) listen(`v_${r.gameId}_${r.round}`, "votes", w.roundUnsubs);
+      if (playing && r.mode === "preguntas" && r.settings?.guess) listen(`g_${r.gameId}_${r.round}`, "guesses", w.roundUnsubs);
       if (playing && r.mode === "duo") listen(`d_${r.gameId}_${r.round}`, "answers", w.roundUnsubs);
     }
   };
@@ -696,12 +717,20 @@ function genderCounts(players) {
   return counts;
 }
 
-function singleGenderWarning(players) {
-  const { hombre, mujer } = genderCounts(players);
-  if (hombre === 1 && mujer === 1) return "Hay solo 1 hombre y 1 mujer: con el desglose por género se sabría qué votó cada uno.";
-  if (hombre === 1) return "Hay solo 1 hombre: con el desglose por género se sabría qué votó.";
-  if (mujer === 1) return "Hay solo 1 mujer: con el desglose por género se sabría qué votó.";
-  return "";
+// Géneros cuyo desglose se puede mostrar sin delatar a nadie (3 o más personas)
+const MIN_GENDER_GROUP = 3;
+const GENDER_GROUPS = [
+  { key: "hombre", plural: "hombres", label: "👨 Hombres", color: "var(--cyan)" },
+  { key: "mujer", plural: "mujeres", label: "👩 Mujeres", color: "var(--pink)" },
+  { key: "otro", plural: "otros", label: "🌈 Otros", color: "var(--purple)" },
+];
+
+function genderPreviewText(players) {
+  const counts = genderCounts(players);
+  const shown = GENDER_GROUPS.filter((g) => counts[g.key] >= MIN_GENDER_GROUP).map((g) => g.plural);
+  const summary = GENDER_GROUPS.filter((g) => counts[g.key] > 0).map((g) => `${counts[g.key]} ${g.plural}`).join(", ");
+  if (shown.length === 0) return `Hay ${summary || "0 jugadores"}: ningún género llega a 3 personas, así que solo se verá el total.`;
+  return `Hay ${summary}: se mostrará el desglose de ${shown.join(" y ")}. Los grupos con menos de 3 se ocultan para no delatar a nadie.`;
 }
 
 // Tipos de pregunta que el anfitrión puede activar o desactivar en el paso 2
@@ -713,7 +742,19 @@ const QUESTION_TYPES = [
 ];
 
 let hostStep = 1;
-let selectedTypes = new Set(QUESTION_TYPES.map((t) => t.type));
+const setup = {
+  types: new Set(QUESTION_TYPES.map((t) => t.type)),
+  levels: new Set([1, 2]),
+  temas: new Set(TEMAS_18.map((t) => t.tema)),
+  variant: PERSONA_VARIANTS[0].key,
+  guess: false,
+  revealGender: true,
+  revealAuthor: true,
+};
+
+function isSpicy(dyn) {
+  return dyn.category === "secretos_intimos";
+}
 
 // Preguntas disponibles para una dinámica (null si la dinámica no usa el banco de preguntas)
 function dynamicPool(dyn) {
@@ -722,19 +763,24 @@ function dynamicPool(dyn) {
   return null;
 }
 
-function typeCounts(dyn) {
+function setupQuestions(dyn) {
   const pool = dynamicPool(dyn);
-  const counts = {};
-  pool?.questions.forEach((q) => {
-    const t = classifyGroupQuestion(q, pool.category).type;
-    counts[t] = (counts[t] || 0) + 1;
-  });
-  return counts;
+  if (!pool) return [];
+  if (isSpicy(dyn)) return pool.questions.filter((q) => setup.levels.has(q.lvl) && setup.temas.has(q.tema));
+  return pool.questions.filter((q) => setup.types.has(classifyGroupQuestion(q, pool.category).type));
 }
 
-function selectedQuestionCount(dyn) {
-  const counts = typeCounts(dyn);
-  return [...selectedTypes].reduce((sum, t) => sum + (counts[t] || 0), 0);
+function toggleRowHtml({ attr, value, on, icon, title, desc, count }) {
+  return `<button type="button" class="type-toggle ${on ? "selected" : ""}" data-${attr}="${escapeAttr(value)}" aria-pressed="${on}">
+    <span class="type-check">${on ? "✓" : ""}</span>
+    <span class="type-icon">${icon}</span>
+    <span class="type-text"><strong>${title}</strong>${desc ? `<small>${desc}</small>` : ""}</span>
+    ${count !== undefined ? `<span class="type-count">${count}</span>` : ""}
+  </button>`;
+}
+
+function step2Section(title, rows) {
+  return rows ? `<span class="field-label">${title}</span><div class="type-toggle-list">${rows}</div>` : "";
 }
 
 function renderDynamicsGrid() {
@@ -755,33 +801,60 @@ function renderHostStep() {
   if (hostStep !== 2) return;
 
   $("selected-dynamic-summary").innerHTML = `<span class="dyn-icon">${dyn.icon}</span><div><strong>${dyn.title}</strong><small>${dyn.desc}</small></div>`;
+  const pool = dynamicPool(dyn);
+  const players = roomWatcher ? activePlayers(roomWatcher.players) : [];
+  let html = "";
 
-  const counts = typeCounts(dyn);
-  const available = QUESTION_TYPES.filter((t) => counts[t.type] > 0);
-  $("question-types-box").hidden = available.length === 0;
-  $("question-types-list").innerHTML = available
-    .map((t) => {
-      const on = selectedTypes.has(t.type);
-      const title = dyn.mode === "duo" && t.duoTitle ? t.duoTitle : t.title;
-      const desc = dyn.mode === "duo" && t.duoDesc ? t.duoDesc : t.desc;
-      return `<button type="button" class="type-toggle ${on ? "selected" : ""}" data-type="${t.type}" aria-pressed="${on}">
-        <span class="type-check">${on ? "✓" : ""}</span>
-        <span class="type-icon">${t.icon}</span>
-        <span class="type-text"><strong>${title}</strong><small>${desc}</small></span>
-        <span class="type-count">${counts[t.type]}</span>
-      </button>`;
-    })
-    .join("");
+  if (dyn.mode === "persona") {
+    html += step2Section("¿Qué van a dedicarle a cada persona?", PERSONA_VARIANTS.map((v) =>
+      toggleRowHtml({ attr: "variant", value: v.key, on: setup.variant === v.key, icon: v.icon, title: v.title, desc: v.desc })
+    ).join(""));
+  } else if (pool && isSpicy(dyn)) {
+    const byLevel = (lvl) => pool.questions.filter((q) => q.lvl === lvl && setup.temas.has(q.tema)).length;
+    const byTema = (tema) => pool.questions.filter((q) => q.tema === tema && setup.levels.has(q.lvl)).length;
+    html += step2Section("Niveles de intensidad (marca los que quieran)", NIVELES_18.map((n) =>
+      toggleRowHtml({ attr: "lvl", value: n.lvl, on: setup.levels.has(n.lvl), icon: n.icon, title: `${n.lvl} · ${n.title}`, desc: n.desc, count: byLevel(n.lvl) })
+    ).join(""));
+    html += step2Section("Temas", TEMAS_18.map((t) =>
+      toggleRowHtml({ attr: "tema", value: t.tema, on: setup.temas.has(t.tema), icon: t.icon, title: t.title, count: byTema(t.tema) })
+    ).join(""));
+  } else if (pool) {
+    const counts = {};
+    pool.questions.forEach((q) => {
+      const t = classifyGroupQuestion(q, pool.category).type;
+      counts[t] = (counts[t] || 0) + 1;
+    });
+    html += step2Section("Tipos de pregunta (marca los que quieran)", QUESTION_TYPES.filter((t) => counts[t.type] > 0).map((t) =>
+      toggleRowHtml({
+        attr: "type", value: t.type, on: setup.types.has(t.type), icon: t.icon, count: counts[t.type],
+        title: dyn.mode === "duo" && t.duoTitle ? t.duoTitle : t.title,
+        desc: dyn.mode === "duo" && t.duoDesc ? t.duoDesc : t.desc,
+      })
+    ).join(""));
+  }
+
+  // Opciones extra, con el mismo estilo de casilla
+  const options = [];
+  if (dyn.mode === "preguntas") {
+    options.push(toggleRowHtml({ attr: "opt", value: "guess", on: setup.guess, icon: "🎯", title: "Adivina cuántos", desc: "Antes de ver los resultados, cada uno apuesta cuántos respondieron que sí (o qué opción ganó). Suma puntos para el ranking." }));
+  }
+  if (dyn.gender) {
+    options.push(toggleRowHtml({ attr: "opt", value: "revealGender", on: setup.revealGender, icon: "🚻", title: "Resultados por género", desc: setup.revealGender ? genderPreviewText(players) : "Solo se verá el total del grupo." }));
+  }
+  if (dyn.author) {
+    options.push(toggleRowHtml({ attr: "opt", value: "revealAuthor", on: setup.revealAuthor, icon: "👀", title: "Revelar quién escribió cada confesión", desc: "Si lo desactivas, las confesiones son 100% anónimas." }));
+  }
+  html += step2Section("Opciones", options.join(""));
+  $("step2-content").innerHTML = html;
   updateDynamicOptions();
 }
 
 function updateDynamicOptions() {
   const dyn = getDynamic(selectedDynamicKey);
-  const usesTypes = !!dynamicPool(dyn);
-  $("opt-reveal-author-row").hidden = !dyn.author;
-  $("opt-reveal-gender-row").hidden = !dyn.gender || !selectedTypes.has("yesno");
+  const usesQuestions = !!dynamicPool(dyn);
   const players = roomWatcher ? activePlayers(roomWatcher.players) : [];
-  let warning = !$("opt-reveal-gender-row").hidden && $("chk-reveal-gender").checked ? singleGenderWarning(players) : "";
+
+  let warning = "";
   if (dyn.audience) {
     const outsiders = players.filter((p) => p.gender !== dyn.audience).length;
     if (outsiders > 0) {
@@ -789,18 +862,21 @@ function updateDynamicOptions() {
       warning = `Esta dinámica está pensada para una junta solo de ${audienceLabel}, y en la sala hay ${outsiders} ${outsiders === 1 ? "persona" : "personas"} de otro género.`;
     }
   }
+  if (isSpicy(dyn) && (setup.levels.has(4) || setup.levels.has(5))) {
+    warning = "Los niveles 4 y 5 son muy explícitos: no se recomiendan en contextos de trabajo.";
+  }
   $("single-gender-warning-box").hidden = !warning;
   $("lbl-single-gender-desc").textContent = warning;
 
   // El botón de empezar aparece solo si todos están listos y hay preguntas para jugar
   const ready = roomWatcher?.room ? lobbyReadiness(roomWatcher) : { allReady: false, readyCount: 0, active: [] };
-  const questionCount = usesTypes ? selectedQuestionCount(dyn) : 1;
+  const questionCount = usesQuestions ? setupQuestions(dyn).length : 1;
   const canStart = ready.allReady && questionCount > 0;
   $("btn-start-dynamic").hidden = !canStart;
-  $("btn-start-dynamic").textContent = usesTypes ? `🚀 Empezar para todos (${questionCount} preguntas)` : "🚀 Empezar para todos";
+  $("btn-start-dynamic").textContent = usesQuestions ? `🚀 Empezar para todos (${questionCount} preguntas)` : "🚀 Empezar para todos";
   $("start-wait-msg").hidden = canStart;
   $("start-wait-msg").textContent =
-    questionCount === 0 ? "☝️ Marca al menos un tipo de pregunta."
+    questionCount === 0 ? (isSpicy(dyn) ? "☝️ Marca al menos un nivel y un tema." : "☝️ Marca al menos un tipo de pregunta.")
     : ready.active.length < 2 ? "👥 Se necesitan al menos 2 jugadores para empezar."
     : `⏳ Esperando que todos estén listos (${ready.readyCount} de ${ready.active.length}).`;
 }
@@ -813,7 +889,7 @@ $("dynamics-grid").addEventListener("click", (e) => {
 });
 
 $("btn-host-next-step").addEventListener("click", () => {
-  selectedTypes = new Set(QUESTION_TYPES.map((t) => t.type));
+  setup.types = new Set(QUESTION_TYPES.map((t) => t.type));
   hostStep = 2;
   renderHostStep();
 });
@@ -823,16 +899,22 @@ $("btn-host-prev-step").addEventListener("click", () => {
   renderHostStep();
 });
 
-$("question-types-list").addEventListener("click", (e) => {
+function toggleInSet(set, value) {
+  if (set.has(value)) set.delete(value);
+  else set.add(value);
+}
+
+$("step2-content").addEventListener("click", (e) => {
   const btn = e.target.closest(".type-toggle");
   if (!btn) return;
-  const t = btn.dataset.type;
-  if (selectedTypes.has(t)) selectedTypes.delete(t);
-  else selectedTypes.add(t);
+  const d = btn.dataset;
+  if (d.type) toggleInSet(setup.types, d.type);
+  else if (d.lvl) toggleInSet(setup.levels, Number(d.lvl));
+  else if (d.tema) toggleInSet(setup.temas, d.tema);
+  else if (d.variant) setup.variant = d.variant;
+  else if (d.opt) setup[d.opt] = !setup[d.opt];
   renderHostStep();
 });
-
-$("chk-reveal-gender").addEventListener("change", updateDynamicOptions);
 
 function renderLobby(w) {
   const { active, readyCount } = lobbyReadiness(w);
@@ -897,12 +979,24 @@ function gameResetFields() {
   return {
     phase: null, round: 0, pos: 0, deck: [], order: [], current: null,
     speaker: null, currentAuthor: null, realIdx: null, category: null,
+    variant: null, participants: [], hands: {}, shown: 0, hidden: [], lastGuess: null,
   };
 }
 
 function filteredDeck(dyn) {
-  const pool = dynamicPool(dyn);
-  return shuffleArray(pool.questions.filter((q) => selectedTypes.has(classifyGroupQuestion(q, pool.category).type)));
+  return shuffleArray(setupQuestions(dyn));
+}
+
+// Reparte a cada jugador N-1 carteles distintos. Si alcanzan, ningún cartel se repite en toda la ronda.
+function dealCartelHands(participants) {
+  const perHand = participants.length - 1;
+  let pool = shuffleArray(CARTELES);
+  const hands = {};
+  participants.forEach((p) => {
+    if (pool.length < perHand) pool = shuffleArray(CARTELES);
+    hands[p.id] = pool.splice(0, perHand);
+  });
+  return hands;
 }
 
 function pickSpeaker(players, exceptId) {
@@ -927,13 +1021,17 @@ $("btn-start-dynamic").addEventListener("click", async () => {
     dynamicKey: dyn.key,
     gameId: randomId(6),
     settings: {
-      revealAuthor: $("chk-reveal-truth").checked,
-      revealGender: $("chk-reveal-gender").checked,
-      types: [...selectedTypes],
+      revealAuthor: setup.revealAuthor,
+      revealGender: setup.revealGender,
+      guess: dyn.mode === "preguntas" && setup.guess,
+      types: [...setup.types],
+      levels: [...setup.levels],
+      temas: [...setup.temas],
     },
+    scores: {},
   };
-  if (dynamicPool(dyn) && selectedQuestionCount(dyn) === 0) {
-    showToast("Marca al menos un tipo de pregunta", "☝️");
+  if (dynamicPool(dyn) && setupQuestions(dyn).length === 0) {
+    showToast("No hay preguntas con esa selección", "☝️");
     return;
   }
 
@@ -947,6 +1045,8 @@ $("btn-start-dynamic").addEventListener("click", async () => {
     fields.phase = "answer";
   } else if (dyn.mode === "muro") {
     fields.phase = "wall";
+  } else if (dyn.mode === "persona") {
+    Object.assign(fields, personaStartFields(w));
   } else {
     fields.phase = "write";
   }
@@ -997,6 +1097,7 @@ function questionTypeLabel(info) {
     suspect: "👉 Voten por alguien",
     choice: info.options?.length > 2 ? "☝️ Elige una opción" : "🅰️/🅱️ Elijan una opción",
     yesno: "🙋 Sí o no, en secreto",
+    experience: "🔥 ¿Lo has hecho?",
     open: "🎤 Ronda de respuesta",
   }[info.type];
 }
@@ -1057,6 +1158,19 @@ function choiceResultsHtml(votes, options) {
     </div>`;
 }
 
+// Grupos de género con suficientes votos para mostrarse sin delatar a nadie
+function visibleGenderGroups(votes) {
+  return GENDER_GROUPS.map((g) => ({ ...g, votes: votes.filter((v) => v.gender === g.key) })).filter((g) => g.votes.length >= MIN_GENDER_GROUP);
+}
+
+function hiddenGenderNote(votes, revealGender) {
+  if (!revealGender) return "";
+  const withGender = votes.filter((v) => v.gender).length;
+  return withGender > 0 && visibleGenderGroups(votes).length === 0
+    ? `<p class="muted-small center">🛡️ Desglose por género oculto: ningún género tiene 3 o más personas.</p>`
+    : "";
+}
+
 function yesNoResultsHtml(votes, info, revealGender) {
   const yes = votes.filter((v) => v.value === "yes").length;
   const no = votes.length - yes;
@@ -1067,25 +1181,19 @@ function yesNoResultsHtml(votes, info, revealGender) {
     </div>`;
 
   if (revealGender) {
-    const groups = [
-      { key: "hombre", label: "👨 Hombres", color: "var(--cyan)" },
-      { key: "mujer", label: "👩 Mujeres", color: "var(--pink)" },
-      { key: "otro", label: "🌈 Otros", color: "var(--purple)" },
-    ];
-    const rows = groups
+    const rows = visibleGenderGroups(votes)
       .map((g) => {
-        const group = votes.filter((v) => v.gender === g.key);
-        if (group.length === 0) return "";
-        const groupYes = group.filter((v) => v.value === "yes").length;
-        const pct = Math.round((groupYes / group.length) * 100);
+        const groupYes = g.votes.filter((v) => v.value === "yes").length;
+        const pct = Math.round((groupYes / g.votes.length) * 100);
         return `
           <div class="result-row">
-            <div class="result-row-head"><span>${g.label}</span><strong>${groupYes} de ${group.length} dijeron sí</strong></div>
+            <div class="result-row-head"><span>${g.label}</span><strong>${groupYes} de ${g.votes.length} dijeron sí</strong></div>
             <div class="result-track"><div class="result-fill" style="width:${pct}%; background:${g.color}"></div></div>
           </div>`;
       })
       .join("");
     if (rows) html += `<div class="results-bars-list">${rows}</div>`;
+    html += hiddenGenderNote(votes, revealGender);
   }
 
   let intrigue;
@@ -1094,6 +1202,116 @@ function yesNoResultsHtml(votes, info, revealGender) {
   else if (yes === 1) intrigue = "Solo 1 persona lo admitió. ¿Quién será? 👀";
   else intrigue = `${yes} de ${votes.length} personas dijeron que sí 🤫`;
   return html + `<div class="results-headline subtle">${intrigue}</div>`;
+}
+
+const EXPERIENCE_COLORS = ["var(--emerald)", "var(--amber)", "var(--coral)"];
+
+function experienceResultsHtml(votes, revealGender) {
+  const counts = [0, 1, 2].map((i) => votes.filter((v) => v.value === i).length);
+  let html = `<div class="results-bars-list">${EXPERIENCE_OPTIONS.map((label, i) =>
+    barRow(label, counts[i], votes.length, { color: EXPERIENCE_COLORS[i], highlight: false })
+  ).join("")}</div>`;
+
+  if (revealGender) {
+    const rows = visibleGenderGroups(votes)
+      .map((g) => {
+        const c = [0, 1, 2].map((i) => g.votes.filter((v) => v.value === i).length);
+        const segments = c.map((n, i) => `<div style="width:${(n / g.votes.length) * 100}%; background:${EXPERIENCE_COLORS[i]}"></div>`).join("");
+        return `
+          <div class="result-row">
+            <div class="result-row-head"><span>${g.label}</span><strong>✅ ${c[0]} · 😏 ${c[1]} · 🙅 ${c[2]}</strong></div>
+            <div class="result-track stacked">${segments}</div>
+          </div>`;
+      })
+      .join("");
+    if (rows) html += `<div class="results-bars-list">${rows}</div>`;
+    html += hiddenGenderNote(votes, revealGender);
+  }
+
+  const [done, want] = counts;
+  let intrigue;
+  if (done === votes.length) intrigue = "¡Todos lo han hecho! 🔥";
+  else if (done === 0 && want > 0) intrigue = `Nadie lo ha hecho... pero ${want} ${want === 1 ? "tiene" : "tienen"} ganas 😏`;
+  else if (done === 0) intrigue = "Nadie lo ha hecho ni le interesa 😇";
+  else if (want > 0) intrigue = `${done} ${done === 1 ? "lo ha hecho" : "lo han hecho"} y ${want} ${want === 1 ? "tiene" : "tienen"} ganas 😏`;
+  else intrigue = `${done} de ${votes.length} ${done === 1 ? "lo ha hecho" : "lo han hecho"} 🤫`;
+  return html + `<div class="results-headline subtle">${intrigue}</div>`;
+}
+
+// ---------- Adivina cuántos ----------
+// Se apuesta siempre por lo más jugoso: cuántos dijeron "sí" o "lo he hecho", qué opción ganó o quién fue el más votado.
+function guessSpec(info, players) {
+  const numbers = () => Array.from({ length: players.length + 1 }, (_, n) => ({ value: n, label: String(n), html: String(n) }));
+  const topSet = (counts) => {
+    const max = Math.max(0, ...counts.values());
+    return new Set([...counts.entries()].filter(([, c]) => c === max && max > 0).map(([k]) => k));
+  };
+  if (info.type === "yesno") {
+    return {
+      prompt: `¿Cuántos crees que respondieron "${info.labels[0]}"?`, numeric: true, options: numbers(),
+      answer: (votes) => votes.filter((v) => v.value === "yes").length,
+    };
+  }
+  if (info.type === "experience") {
+    return {
+      prompt: `¿Cuántos crees que respondieron "${EXPERIENCE_OPTIONS[0]}"?`, numeric: true, options: numbers(),
+      answer: (votes) => votes.filter((v) => v.value === 0).length,
+    };
+  }
+  if (info.type === "choice") {
+    return {
+      prompt: "¿Qué opción crees que ganó?",
+      options: info.options.map((opt, i) => ({ value: i, label: opt, html: `<span class="opt-letter">${optionLetter(i)}</span> ${escapeHtml(opt)}` })),
+      answer: (votes) => topSet(new Map(info.options.map((_, i) => [i, votes.filter((v) => v.value === i).length]))),
+      describe: (set) => (set.size ? `Ganó: ${[...set].map((i) => info.options[i]).join(" y ")}` : "Nadie votó"),
+    };
+  }
+  if (info.type === "suspect") {
+    return {
+      prompt: "¿Quién crees que fue el más votado?",
+      options: players.map((p) => ({ value: p.id, label: p.name, html: `<span class="vote-avatar">${p.avatar || "👤"}</span> ${escapeHtml(p.name)}` })),
+      answer: (votes) => topSet(votes.reduce((m, v) => m.set(v.value, (m.get(v.value) || 0) + 1), new Map())),
+      describe: (set) => `Más votado: ${[...set].map((id) => players.find((p) => p.id === id)?.name || "?").join(" y ")}`,
+    };
+  }
+  return null;
+}
+
+function isCorrectGuess(spec, answer, value) {
+  return spec.numeric ? value === answer : answer.has(value);
+}
+
+function guessKey(room) {
+  return `rh_g_${roomWatcher.code}_${room.gameId}_${room.round}`;
+}
+
+async function castGuess(value, label) {
+  const w = roomWatcher;
+  const room = w?.room;
+  if (!room || load("session", guessKey(room))) return;
+  store("session", guessKey(room), JSON.stringify({ value, label }));
+  renderGame(w);
+  try {
+    await setDoc(doc(db, "salas", w.code, `g_${room.gameId}_${room.round}`, profile.playerId), { value, name: profile.name });
+    markStepDone();
+  } catch (err) {
+    unstore("session", guessKey(room));
+    renderGame(w);
+    showToast("No se pudo guardar tu apuesta: " + friendlyError(err), "❌");
+  }
+}
+
+function rankingHtml(scores) {
+  const sorted = Object.values(scores || {}).filter((s) => s.pts > 0).sort((a, b) => b.pts - a.pts).slice(0, 5);
+  if (!sorted.length) return "";
+  return `<div class="ranking">🏆 <strong>Mejor adivino:</strong> ${sorted.map((s, i) => `${i === 0 ? "👑 " : ""}${escapeHtml(s.name)} (${s.pts})`).join(" · ")}</div>`;
+}
+
+function guessOutcomeHtml(room) {
+  const g = room.lastGuess;
+  if (!g || g.round !== room.round) return "";
+  const who = g.winners.length ? `Acertaron: ${g.winners.map(escapeHtml).join(", ")} 🎯` : "Nadie acertó 😅";
+  return `<div class="guess-outcome"><strong>${escapeHtml(g.answer)}</strong><span>${who}</span></div>${rankingHtml(room.scores)}`;
 }
 
 function voteButtonsHtml(buttons) {
@@ -1122,7 +1340,7 @@ function renderGame(w) {
   $("game-mode-pill").textContent = `${dyn.icon} ${dyn.title}`;
   $("btn-game-back").textContent = isHost() ? "← Terminar" : "← Salir";
 
-  const renderers = { preguntas: renderPreguntas, confesiones: renderConfesiones, tres: renderTres, duo: renderDuo, muro: renderMuro };
+  const renderers = { preguntas: renderPreguntas, confesiones: renderConfesiones, tres: renderTres, duo: renderDuo, muro: renderMuro, persona: renderPersona };
   renderers[room.mode]?.(w);
   $("game-player-status").innerHTML = playerStatusHtml(w);
 }
@@ -1134,7 +1352,12 @@ function currentStep(room) {
   const g = room.gameId;
   if (room.mode === "preguntas") {
     const info = classifyGroupQuestion(room.deck[room.pos], room.category);
-    return info.type === "open" ? null : { key: `${g}:${room.round}`, verb: "votó" };
+    if (info.type === "open" || room.phase === "results") return null;
+    if (room.phase === "guess") return { key: `${g}:${room.round}:guess`, verb: "apostó" };
+    return { key: `${g}:${room.round}`, verb: "votó" };
+  }
+  if (room.mode === "persona") {
+    return room.phase === "write" ? { key: `${g}:write`, verb: "finalizó" } : null;
   }
   if (room.mode === "confesiones" || room.mode === "tres") {
     if (room.phase === "write") return { key: `${g}:write`, verb: room.mode === "tres" ? "está listo" : "envió" };
@@ -1174,6 +1397,7 @@ function ensurePanel(key, html) {
 }
 
 // ---------- Preguntas en grupo (votos / ronda de respuesta) ----------
+// Fases: vote -> (guess, si está activo "Adivina cuántos") -> results. El anfitrión avanza cada fase.
 function renderPreguntas(w) {
   const room = w.room;
   const question = room.deck[room.pos] || "";
@@ -1181,25 +1405,23 @@ function renderPreguntas(w) {
   const cat = getCategory(room.category);
   const players = activePlayers(w.players);
   const revealGender = !!room.settings?.revealGender;
+  const nivel = typeof question === "object" && question.lvl ? NIVELES_18.find((n) => n.lvl === question.lvl) : null;
 
-  $("game-status").textContent = `${cat?.titulo || ""} · Pregunta ${room.pos + 1} de ${room.deck.length}`;
+  $("game-status").textContent = `${cat?.titulo || ""} · Pregunta ${room.pos + 1} de ${room.deck.length}${nivel ? ` · ${nivel.icon}` : ""}`;
 
   let privacy = "";
-  if (info.type === "yesno") privacy = revealGender ? "🛡️ Voto anónimo. Se muestra el total y el desglose por género." : "🛡️ Voto anónimo. Solo se muestra el total del grupo.";
+  if (info.type === "yesno" || info.type === "experience") privacy = revealGender ? "🛡️ Voto anónimo. Se ve el total y el desglose de los géneros con 3 o más personas." : "🛡️ Voto anónimo. Solo se muestra el total del grupo.";
   else if (info.type === "suspect") privacy = "🛡️ Voto secreto: nadie ve por quién votaste.";
   else if (info.type === "choice") privacy = "🛡️ Voto secreto: solo se ven los porcentajes.";
 
-  const singleWarning = info.type === "yesno" && revealGender ? singleGenderWarning(players) : "";
-
   ensurePanel(
-    `preguntas|${room.gameId}|${room.round}|${room.pos}`,
+    `preguntas|${room.gameId}|${room.round}|${room.pos}|${room.phase}`,
     `
     <div class="question-hero">
       <span class="type-badge">${questionTypeLabel(info)}</span>
       <p class="question-hero-text">${escapeHtml(questionText(question))}</p>
     </div>
-    ${privacy ? `<div class="notice notice-safe">${privacy}</div>` : ""}
-    ${singleWarning ? `<div class="notice notice-warn">⚠️ ${singleWarning}</div>` : ""}
+    ${privacy && room.phase === "vote" ? `<div class="notice notice-safe">${privacy}</div>` : ""}
     <div id="g-vote-area"></div>
     <div class="progress-line" id="g-progress"></div>
     <div id="g-results"></div>`
@@ -1227,47 +1449,80 @@ function renderPreguntas(w) {
     return;
   }
 
-  const myVote = getMyVote(room);
   const votes = w.votes;
   const everyoneVoted = allDone(votes.length, players.length);
-  // Nada se muestra solo: el anfitrión revela cuando votaron todos
-  const showResults = room.phase === "results";
+  const guessOn = !!room.settings?.guess;
+  const spec = guessOn ? guessSpec(info, players) : null;
 
-  if (myVote) {
-    $("g-vote-area").innerHTML = votedHtml(myVote);
-  } else if (!showResults) {
-    let buttons;
-    if (info.type === "yesno") {
-      buttons = [
-        { value: "yes", label: info.labels[0], html: info.labels[0], cls: "big yes" },
-        { value: "no", label: info.labels[1], html: info.labels[1], cls: "big no" },
-      ];
-    } else if (info.type === "choice") {
-      const cls = info.options.length > 2 ? "option compact" : "option";
-      buttons = info.options.map((opt, i) => ({ value: i, label: opt, html: `<span class="opt-letter">${optionLetter(i)}</span> ${escapeHtml(opt)}`, cls }));
+  if (room.phase === "vote") {
+    const myVote = getMyVote(room);
+    if (myVote) {
+      $("g-vote-area").innerHTML = votedHtml(myVote);
     } else {
-      buttons = players.map((p) => ({ value: p.id, label: p.name, html: `<span class="vote-avatar">${p.avatar || "👤"}</span> ${escapeHtml(p.name)}` }));
+      let buttons;
+      if (info.type === "yesno") {
+        buttons = [
+          { value: "yes", label: info.labels[0], html: info.labels[0], cls: "big yes" },
+          { value: "no", label: info.labels[1], html: info.labels[1], cls: "big no" },
+        ];
+      } else if (info.type === "experience") {
+        buttons = EXPERIENCE_OPTIONS.map((label, i) => ({ value: i, label, html: label, cls: `option exp-${i}` }));
+      } else if (info.type === "choice") {
+        const cls = info.options.length > 2 ? "option compact" : "option";
+        buttons = info.options.map((opt, i) => ({ value: i, label: opt, html: `<span class="opt-letter">${optionLetter(i)}</span> ${escapeHtml(opt)}`, cls }));
+      } else {
+        buttons = players.map((p) => ({ value: p.id, label: p.name, html: `<span class="vote-avatar">${p.avatar || "👤"}</span> ${escapeHtml(p.name)}` }));
+      }
+      $("g-vote-area").innerHTML = voteButtonsHtml(buttons);
     }
-    $("g-vote-area").innerHTML = voteButtonsHtml(buttons);
-  } else {
-    $("g-vote-area").innerHTML = "";
+    $("g-progress").textContent = `🗳️ ${votes.length} de ${players.length} votaron`;
+    $("g-results").innerHTML = "";
+    const nextStep = guessOn && spec
+      ? { action: "to-guess", label: "🎯 ¡A adivinar!", cls: "btn-purple" }
+      : { action: "show-results", label: "📊 Mostrar resultados", cls: "btn-purple" };
+    $("game-host-bar").innerHTML = host
+      ? hostButtons([everyoneVoted ? nextStep : { ...nextStep, label: `⏳ Esperando a todos (${votes.length} de ${players.length})`, disabled: true }])
+      : nonHostNote("Cuando todos voten, el anfitrión sigue.");
+    return;
   }
 
-  $("g-progress").textContent = `🗳️ ${votes.length} de ${players.length} votaron`;
+  if (room.phase === "guess" && spec) {
+    let myGuess = null;
+    try { myGuess = JSON.parse(load("session", guessKey(room)) || "null"); } catch {}
+    $("g-vote-area").innerHTML = myGuess
+      ? `<div class="voted-status">🎯 Tu apuesta: <strong>${escapeHtml(myGuess.label)}</strong></div>`
+      : `<p class="guess-prompt">🎯 ${escapeHtml(spec.prompt)}</p>
+         <div class="voting-options-grid ${spec.numeric ? "numbers" : ""}">${spec.options
+           .map((o) => `<button type="button" class="vote-btn ${spec.numeric ? "number" : "option compact"}" data-guess="${escapeAttr(JSON.stringify(o.value))}" data-label="${escapeAttr(o.label)}">${o.html}</button>`)
+           .join("")}</div>`;
+    const guesses = w.guesses.length;
+    $("g-progress").textContent = `🎯 ${guesses} de ${players.length} apostaron`;
+    $("g-results").innerHTML = "";
+    const allGuessed = allDone(guesses, players.length);
+    $("game-host-bar").innerHTML = host
+      ? hostButtons([allGuessed
+          ? { action: "show-results", label: "📊 Mostrar resultados", cls: "btn-purple" }
+          : { action: "show-results", label: `⏳ Esperando apuestas (${guesses} de ${players.length})`, cls: "btn-purple", disabled: true }])
+      : nonHostNote("Cuando todos apuesten, el anfitrión muestra los resultados.");
+    return;
+  }
 
-  if (showResults && votes.length > 0) {
+  // Resultados
+  $("g-vote-area").innerHTML = "";
+  $("g-progress").textContent = "";
+  if (votes.length > 0) {
     let html;
     if (info.type === "suspect") html = suspectResultsHtml(votes, w.players);
     else if (info.type === "choice") html = choiceResultsHtml(votes, info.options);
+    else if (info.type === "experience") html = experienceResultsHtml(votes, revealGender);
     else html = yesNoResultsHtml(votes, info, revealGender);
-    $("g-results").innerHTML = `<div class="results-box">${html}</div>`;
+    $("g-results").innerHTML = `${guessOn ? guessOutcomeHtml(room) : ""}<div class="results-box">${html}</div>`;
   } else {
-    $("g-results").innerHTML = showResults ? `<p class="muted-small center">Nadie votó en esta ronda.</p>` : "";
+    $("g-results").innerHTML = `<p class="muted-small center">Nadie votó en esta ronda.</p>`;
   }
-
   $("game-host-bar").innerHTML = host
-    ? hostButtons([revealOrNext(showResults, everyoneVoted, votes.length, players.length, "show-results", "📊 Mostrar resultados", "next-question", "Siguiente pregunta ➔")])
-    : nonHostNote(showResults ? "Esperando la siguiente pregunta..." : "El anfitrión muestra los resultados cuando todos voten.");
+    ? hostButtons([{ action: "next-question", label: "Siguiente pregunta ➔" }])
+    : nonHostNote("Esperando la siguiente pregunta...");
 }
 
 // Los resultados solo se muestran cuando votó cada jugador conectado
@@ -1291,7 +1546,7 @@ function handleVoteClick(btn) {
   const extra = {};
   if (room.mode === "preguntas") {
     const info = classifyGroupQuestion(room.deck[room.pos], room.category);
-    if (info.type === "yesno" && room.settings?.revealGender) extra.gender = profile.gender;
+    if ((info.type === "yesno" || info.type === "experience") && room.settings?.revealGender) extra.gender = profile.gender;
     if (info.type === "suspect") extra.name = label;
   }
   if (room.mode === "confesiones") extra.name = label;
@@ -1657,6 +1912,271 @@ async function submitDuo(presetAnswer) {
   }
 }
 
+// ---------- Para cada persona (carteles, profesión, aprender, regalo, agradecimientos) ----------
+// Paso 1: cada jugador completa algo para cada uno de los demás y presiona Finalizar.
+// Paso 2: se revisa persona por persona. Lo que se escribe se guarda sin nombre de quién lo dio.
+function personaVariant(room) {
+  return PERSONA_VARIANTS.find((v) => v.key === room.variant) || PERSONA_VARIANTS[0];
+}
+
+function personaStartFields(w, variant = setup.variant) {
+  const participants = activePlayers(w.players).map((p) => ({ id: p.id, name: p.name, avatar: p.avatar || "👤" }));
+  return {
+    phase: "write",
+    variant,
+    participants,
+    hands: variant === "carteles" ? dealCartelHands(participants) : {},
+  };
+}
+
+function personaDraftKey(room) {
+  return `rh_p_${roomWatcher.code}_${room.gameId}`;
+}
+
+function loadPersonaDraft(room) {
+  try { return JSON.parse(load("session", personaDraftKey(room)) || "{}"); } catch { return {}; }
+}
+
+function savePersonaDraft(room, draft) {
+  store("session", personaDraftKey(room), JSON.stringify(draft));
+}
+
+function personaFormHtml(room, v, others) {
+  const draft = loadPersonaDraft(room);
+  const blocks = others
+    .map((p) => {
+      const d = draft[p.id] || {};
+      let body;
+      if (v.key === "carteles") {
+        body = `<div class="cartel-grid" data-pid="${escapeAttr(p.id)}"></div>`;
+      } else {
+        const a = v.fieldA.long
+          ? `<textarea class="input-field" rows="2" maxlength="200" data-pid="${escapeAttr(p.id)}" data-field="a" placeholder="${escapeAttr(v.fieldA.placeholder)}">${escapeHtml(d.a || "")}</textarea>`
+          : `<input type="text" class="input-field" maxlength="80" data-pid="${escapeAttr(p.id)}" data-field="a" placeholder="${escapeAttr(v.fieldA.placeholder)}" value="${escapeAttr(d.a || "")}">`;
+        const suggest = v.suggest ? `<button type="button" class="btn btn-secondary btn-sm" data-action="suggest-prof" data-pid="${escapeAttr(p.id)}">🎲 Sugerir</button>` : "";
+        const b = v.fieldB
+          ? `<label class="persona-field-label">${v.fieldB.label}</label>
+             <input type="text" class="input-field" maxlength="160" data-pid="${escapeAttr(p.id)}" data-field="b" placeholder="${escapeAttr(v.fieldB.placeholder)}" value="${escapeAttr(d.b || "")}">`
+          : "";
+        body = `<label class="persona-field-label">${v.fieldA.label}</label>
+          <div class="${suggest ? "join-row tight" : ""}">${a}${suggest}</div>${b}`;
+      }
+      return `<div class="persona-block"><div class="persona-name">${p.avatar} ${escapeHtml(p.name)}</div>${body}</div>`;
+    })
+    .join("");
+  return `
+    <div class="room-box inner">
+      <h3 class="panel-title">${v.icon} ${v.title}</h3>
+      <p class="panel-desc">${v.instructions}</p>
+      <div class="notice notice-safe">🛡️ Anónimo: nadie sabrá qué le diste a quién.</div>
+      ${blocks}
+      <button type="button" class="btn btn-purple btn-block" data-action="persona-finish">✅ Finalizar</button>
+      <p class="muted-small center">Puedes cambiar todo hasta que presiones Finalizar.</p>
+    </div>`;
+}
+
+// Cada cartel solo se puede usar una vez: los ya asignados a otra persona aparecen desactivados
+function refreshCartelChips(room) {
+  const hand = room.hands?.[profile.playerId] || [];
+  const draft = loadPersonaDraft(room);
+  const used = new Map(Object.entries(draft).map(([pid, d]) => [d.card, pid]));
+  document.querySelectorAll(".cartel-grid[data-pid]").forEach((grid) => {
+    const pid = grid.dataset.pid;
+    grid.innerHTML = hand
+      .map((card) => {
+        const owner = used.get(card);
+        const selected = owner === pid;
+        const taken = owner && !selected;
+        return `<button type="button" class="cartel-chip ${selected ? "selected" : ""}" data-cartel="${escapeAttr(card)}" data-pid="${escapeAttr(pid)}" ${taken ? "disabled" : ""}>${escapeHtml(card)}</button>`;
+      })
+      .join("");
+  });
+}
+
+function personaDoneCount(w) {
+  const room = w.room;
+  const activeIds = new Set(activePlayers(w.players).map((p) => p.id));
+  const expected = (room.participants || []).filter((p) => activeIds.has(p.id));
+  const done = expected.filter((p) => w.players.find((x) => x.id === p.id)?.doneFor === `${room.gameId}:write`);
+  return { done: done.length, expected: expected.length };
+}
+
+function giftHtml(v, item, { hidden, hostCanHide }) {
+  if (hidden) return `<div class="gift-card is-hidden">🙈 Mensaje oculto por el anfitrión</div>`;
+  let body;
+  if (v.key === "profesion") body = `<strong>💼 ${escapeHtml(item.text)}</strong>${item.extra ? `<p>${escapeHtml(item.extra)}</p>` : ""}`;
+  else if (v.key === "regalo") body = `<strong>🎁 ${escapeHtml(item.text)}</strong>${item.extra ? `<p>${escapeHtml(item.extra)}</p>` : ""}`;
+  else body = `<p>${escapeHtml(item.text)}</p>`;
+  const hide = hostCanHide ? `<button type="button" class="gift-hide" data-hide="${escapeAttr(item.id)}" title="Ocultar para todos">🙈 Ocultar</button>` : "";
+  return `<div class="gift-card">${body}${hide}</div>`;
+}
+
+// Lo que recibió la persona en pantalla: los carteles de una vez, los textos uno por uno
+function personaRevealHtml(w, { hostCanHide = false } = {}) {
+  const room = w.room;
+  const v = personaVariant(room);
+  const currentId = room.order[room.pos];
+  const items = w.gifts.filter((g) => g.to === currentId).sort((a, b) => a.id.localeCompare(b.id));
+  if (v.key === "carteles") {
+    return {
+      total: items.length,
+      html: `<div class="cartel-reveal">${items.map((g) => `<span class="cartel-chip big">${escapeHtml(g.text)}</span>`).join("")}</div>`,
+    };
+  }
+  const hidden = new Set(room.hidden || []);
+  const visible = items.slice(0, room.shown || 0);
+  return {
+    total: items.length,
+    shown: visible.length,
+    html: `<div class="gift-list">${visible.map((item) => giftHtml(v, item, { hidden: hidden.has(item.id), hostCanHide })).join("")}</div>`,
+  };
+}
+
+function renderPersona(w) {
+  const room = w.room;
+  const v = personaVariant(room);
+  const host = isHost();
+  const participants = room.participants || [];
+
+  if (room.phase === "write") {
+    $("game-status").textContent = `${v.icon} ${v.title} · Dedica algo a cada persona`;
+    const me = participants.find((p) => p.id === profile.playerId);
+    const submitted = !!load("session", submissionKey(room));
+    const { done, expected } = personaDoneCount(w);
+    if (!me) {
+      ensurePanel(`persona|${room.gameId}|spectator`, `<div class="waiting"><div class="waiting-icon">👀</div><p>Entraste cuando la dinámica ya había empezado. Podrás ver la ronda cuando comience.</p></div>`);
+    } else if (submitted) {
+      ensurePanel(`persona|${room.gameId}|write|done`, `<div class="room-box inner"><h3 class="panel-title">${v.icon} ${v.title}</h3><div class="voted-status">✓ Enviado. Esperando al resto...</div></div>`);
+    } else {
+      const fresh = ensurePanel(`persona|${room.gameId}|write`, personaFormHtml(room, v, participants.filter((p) => p.id !== me.id)));
+      if (fresh && v.key === "carteles") refreshCartelChips(room);
+    }
+    const everyone = allDone(done, expected);
+    $("game-host-bar").innerHTML = host
+      ? hostButtons([{ action: "persona-start-reveal", label: everyone ? "▶️ Comenzar ronda" : `⏳ Esperando a todos (${done} de ${expected})`, cls: "btn-purple", disabled: !everyone }])
+      : nonHostNote("Cuando todos finalicen, el anfitrión comienza la ronda.");
+    return;
+  }
+
+  if (room.phase === "end") {
+    renderEndPanel(w, "¡Ya pasaron todos! 🎉", "persona-restart");
+    return;
+  }
+
+  // Ronda: una persona a la vez
+  const currentId = room.order[room.pos];
+  const person = participants.find((p) => p.id === currentId) || {};
+  const isMe = currentId === profile.playerId;
+  $("game-status").textContent = `${v.icon} ${v.title} · Persona ${room.pos + 1} de ${room.order.length}`;
+  ensurePanel(
+    `persona|${room.gameId}|reveal|${room.pos}`,
+    `<div class="persona-hero ${isMe ? "is-me" : ""}">
+       <span class="eyebrow">${v.revealTitle}</span>
+       <div class="speaker-name">${person.avatar || "👤"} ${escapeHtml(person.name || "")}</div>
+       ${isMe ? "<p>¡Eres tú! 🙈</p>" : ""}
+     </div>
+     <div id="g-results"></div>
+     <div class="progress-line" id="g-progress"></div>`
+  );
+  const reveal = personaRevealHtml(w, { hostCanHide: host });
+  $("g-results").innerHTML = reveal.html;
+  const isCards = v.key === "carteles";
+  $("g-progress").textContent = isCards ? "" : `💬 ${reveal.shown} de ${reveal.total} mensajes`;
+  const isLast = room.pos + 1 >= room.order.length;
+  const moreMessages = !isCards && reveal.shown < reveal.total;
+  $("game-host-bar").innerHTML = host
+    ? hostButtons([
+        moreMessages
+          ? { action: "persona-next-msg", label: `💬 Siguiente mensaje (${reveal.shown + 1} de ${reveal.total})`, cls: "btn-purple" }
+          : { action: "persona-next-person", label: isLast ? "Terminar ➔" : "Siguiente persona ➔" },
+      ])
+    : nonHostNote(moreMessages ? "El anfitrión va mostrando los mensajes uno por uno." : "Esperando a la siguiente persona...");
+}
+
+function handlePersonaClick(e) {
+  const room = roomWatcher?.room;
+  if (!room || room.mode !== "persona") return false;
+
+  const chip = e.target.closest(".cartel-chip[data-cartel]");
+  if (chip && !chip.disabled) {
+    const draft = loadPersonaDraft(room);
+    const pid = chip.dataset.pid;
+    const card = chip.dataset.cartel;
+    draft[pid] = draft[pid]?.card === card ? {} : { card };
+    savePersonaDraft(room, draft);
+    refreshCartelChips(room);
+    return true;
+  }
+
+  const suggest = e.target.closest('[data-action="suggest-prof"]');
+  if (suggest) {
+    const input = document.querySelector(`[data-pid="${CSS.escape(suggest.dataset.pid)}"][data-field="a"]`);
+    const current = input.value;
+    const options = PROFESIONES.filter((prof) => prof !== current);
+    input.value = options[Math.floor(Math.random() * options.length)];
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+  }
+
+  const hide = e.target.closest("[data-hide]");
+  if (hide && isHost()) {
+    hostUpdate({ hidden: [...new Set([...(room.hidden || []), hide.dataset.hide])] });
+    return true;
+  }
+
+  if (e.target.closest('[data-action="persona-finish"]')) {
+    finishPersona();
+    return true;
+  }
+  return false;
+}
+
+function handlePersonaInput(e) {
+  const field = e.target.closest("[data-field][data-pid]");
+  const room = roomWatcher?.room;
+  if (!field || !room || room.mode !== "persona") return;
+  const draft = loadPersonaDraft(room);
+  draft[field.dataset.pid] = { ...(draft[field.dataset.pid] || {}), [field.dataset.field]: field.value };
+  savePersonaDraft(room, draft);
+}
+
+async function finishPersona() {
+  const w = roomWatcher;
+  const room = w.room;
+  const v = personaVariant(room);
+  const others = (room.participants || []).filter((p) => p.id !== profile.playerId);
+  const draft = loadPersonaDraft(room);
+
+  const missing = others.filter((p) => {
+    const d = draft[p.id] || {};
+    if (v.key === "carteles") return !d.card;
+    return !(d.a || "").trim() || (v.fieldB && !(d.b || "").trim());
+  });
+  if (missing.length) {
+    showToast(`Te falta completar: ${missing.map((p) => p.name).join(", ")}`, "✍️");
+    return;
+  }
+
+  const btn = document.querySelector('[data-action="persona-finish"]');
+  if (btn) btn.disabled = true;
+  try {
+    await Promise.all(
+      others.map((p) => {
+        const d = draft[p.id];
+        const data = v.key === "carteles" ? { to: p.id, text: d.card } : { to: p.id, text: d.a.trim(), extra: (d.b || "").trim() };
+        return setDoc(doc(db, "salas", w.code, `a_${room.gameId}`, randomId(16)), data);
+      })
+    );
+    store("session", submissionKey(room), "1");
+    markStepDone();
+    renderGame(w);
+    showToast("¡Listo! Esperando al resto", "✅");
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    showToast("No se pudo enviar: " + friendlyError(err), "❌");
+  }
+}
+
 // ---------- Muro anónimo ----------
 const WALL_COLORS = ["color-yellow", "color-pink", "color-cyan", "color-green", "color-orange"];
 
@@ -1748,10 +2268,31 @@ const HOST_ACTIONS = {
     });
   },
 
-  "show-results": () => {
+  "to-guess": () => {
     const w = roomWatcher;
     if (!allDone(w.votes.length, activePlayers(w.players).length)) return;
-    return hostUpdate({ phase: "results" });
+    return hostUpdate({ phase: "guess" });
+  },
+
+  "show-results": () => {
+    const w = roomWatcher;
+    const r = w.room;
+    const players = activePlayers(w.players);
+    if (!allDone(w.votes.length, players.length)) return;
+    if (r.phase !== "guess") return hostUpdate({ phase: "results" });
+    if (!allDone(w.guesses.length, players.length)) return;
+
+    // Se calcula quién acertó y se suma al ranking de la partida
+    const info = classifyGroupQuestion(r.deck[r.pos], r.category);
+    const spec = guessSpec(info, players);
+    const answer = spec.answer(w.votes);
+    const winners = w.guesses.filter((g) => isCorrectGuess(spec, answer, g.value));
+    const scores = { ...(r.scores || {}) };
+    winners.forEach((g) => {
+      scores[g.id] = { name: g.name, pts: (scores[g.id]?.pts || 0) + 1 };
+    });
+    const answerText = spec.numeric ? `Fueron ${answer} 🔥` : spec.describe(answer);
+    return hostUpdate({ phase: "results", scores, lastGuess: { round: r.round, answer: answerText, winners: winners.map((g) => g.name) } });
   },
 
   "duo-reveal": () => {
@@ -1817,6 +2358,22 @@ const HOST_ACTIONS = {
     return hostUpdate({ pos: (r.pos + 1) % r.deck.length, round: r.round + 1, phase: "answer" });
   },
 
+  "persona-start-reveal": () => {
+    const w = roomWatcher;
+    const { done, expected } = personaDoneCount(w);
+    if (!allDone(done, expected)) return;
+    return hostUpdate({ phase: "reveal", order: shuffleArray(w.room.participants.map((p) => p.id)), pos: 0, shown: 0, hidden: [] });
+  },
+
+  "persona-next-msg": () => hostUpdate({ shown: (roomWatcher.room.shown || 0) + 1 }),
+
+  "persona-next-person": () => {
+    const r = roomWatcher.room;
+    return r.pos + 1 >= r.order.length ? hostUpdate({ phase: "end" }) : hostUpdate({ pos: r.pos + 1, shown: 0 });
+  },
+
+  "persona-restart": () => hostUpdate({ ...gameResetFields(), ...personaStartFields(roomWatcher, roomWatcher.room.variant), gameId: randomId(6) }),
+
   "end-game": () => hostUpdate({ state: "lobby" }),
 };
 
@@ -1827,10 +2384,18 @@ $("game-host-bar").addEventListener("click", (e) => {
   Promise.resolve(HOST_ACTIONS[btn.dataset.host]?.()).finally(() => { btn.disabled = false; });
 });
 
+$("game-panel").addEventListener("input", handlePersonaInput);
+
 $("game-panel").addEventListener("click", (e) => {
+  if (handlePersonaClick(e)) return;
   const voteBtn = e.target.closest(".vote-btn[data-vote]");
   if (voteBtn) {
     handleVoteClick(voteBtn);
+    return;
+  }
+  const guessBtn = e.target.closest(".vote-btn[data-guess]");
+  if (guessBtn) {
+    castGuess(JSON.parse(guessBtn.dataset.guess), guessBtn.dataset.label);
     return;
   }
   const duoBtn = e.target.closest(".vote-btn[data-duo]");
@@ -1899,7 +2464,7 @@ function renderTvQuestion() {
   tv.index = ((tv.index % tv.deck.length) + tv.deck.length) % tv.deck.length;
   $("tv-q-cat-badge").textContent = `${cat.icono} ${cat.titulo} · ${tv.index + 1} de ${tv.deck.length}`;
   $("tv-q-cat-badge").style.color = cat.color || "var(--cyan)";
-  $("tv-giant-q-text").textContent = tv.deck[tv.index];
+  $("tv-giant-q-text").textContent = questionText(tv.deck[tv.index]);
 }
 
 $("btn-tv-next-q").addEventListener("click", () => { tv.index++; renderTvQuestion(); });
@@ -1976,14 +2541,17 @@ function renderTvRoom(w) {
       results.innerHTML = room.speaker ? `<div class="results-headline">🎤 Responde: ${room.speaker.avatar} ${escapeHtml(room.speaker.name)}</div>` : "";
       return;
     }
-    const showResults = room.phase === "results";
-    if (!showResults) {
+    if (room.phase === "vote") {
       results.innerHTML = `<div class="results-headline">🗳️ ${w.votes.length} de ${players.length} votaron</div>`;
+    } else if (room.phase === "guess") {
+      results.innerHTML = `<div class="results-headline">🎯 A adivinar: ${w.guesses.length} de ${players.length} apostaron</div>`;
     } else if (w.votes.length) {
+      const revealGender = !!room.settings?.revealGender;
       const html = info.type === "suspect" ? suspectResultsHtml(w.votes, w.players)
         : info.type === "choice" ? choiceResultsHtml(w.votes, info.options)
-        : yesNoResultsHtml(w.votes, info, !!room.settings?.revealGender);
-      results.innerHTML = `<div class="results-box">${html}</div>`;
+        : info.type === "experience" ? experienceResultsHtml(w.votes, revealGender)
+        : yesNoResultsHtml(w.votes, info, revealGender);
+      results.innerHTML = `${room.settings?.guess ? guessOutcomeHtml(room) : ""}<div class="results-box">${html}</div>`;
     }
   } else if (room.mode === "confesiones") {
     if (room.phase === "write") {
@@ -2018,6 +2586,20 @@ function renderTvRoom(w) {
     results.innerHTML = revealed
       ? duoRevealHtml(w.answers, classifyGroupQuestion(question))
       : `<div class="results-headline">🔐 ${w.answers.length} de ${players.length} respondieron</div>`;
+  } else if (room.mode === "persona") {
+    const v = personaVariant(room);
+    status.textContent = `${v.icon} ${v.title}`;
+    if (room.phase === "write") {
+      const { done, expected } = personaDoneCount(w);
+      headline.textContent = "Cada uno está dedicando algo a los demás desde su celular ✍️";
+      results.innerHTML = `<div class="results-headline">✅ ${done} de ${expected} finalizaron</div>`;
+    } else if (room.phase === "end") {
+      headline.textContent = "¡Ya pasaron todos! 🎉";
+    } else {
+      const person = (room.participants || []).find((p) => p.id === room.order[room.pos]) || {};
+      headline.textContent = `${person.avatar || ""} ${person.name || ""}`;
+      results.innerHTML = personaRevealHtml(w).html;
+    }
   } else if (room.mode === "muro") {
     headline.textContent = "Muro anónimo 🧱";
     results.innerHTML = `<div class="wall-container">${wallNotesHtml(w.muro.slice(0, 24))}</div>`;
@@ -2057,114 +2639,241 @@ $("btn-close-tv").addEventListener("click", () => {
 });
 
 // ==========================================
-// 7. PANEL DE ADMINISTRACIÓN (ediciones locales + exportar)
+// 7. PANEL DE ADMINISTRACIÓN (login con Google; los cambios son para todos)
 // ==========================================
-let isAdminLoggedIn = false;
+// Solo la cuenta ADMIN_EMAIL puede guardar: lo exigen también las reglas de Firestore.
+let adminUser = null;
+let adminEditingId = null;
 
-function openAdmin() {
-  $("modal-admin").classList.add("active");
-  if (isAdminLoggedIn) showAdminPanel();
+function isAdminUser() {
+  return adminUser?.email === ADMIN_EMAIL;
 }
 
-$("btn-open-admin").addEventListener("click", openAdmin);
-$("btn-close-admin").addEventListener("click", () => $("modal-admin").classList.remove("active"));
+onAuthStateChanged(auth, (user) => {
+  adminUser = user;
+  renderAdminAccess();
+});
 
-$("btn-admin-login").addEventListener("click", () => {
-  const u = $("admin-user-input").value.trim();
-  const p = $("admin-pass-input").value.trim();
-  if (u === "admin" && p === "hielo2025") {
-    isAdminLoggedIn = true;
-    showAdminPanel();
-  } else {
-    showToast("Usuario o contraseña incorrectos", "❌");
+function renderAdminAccess() {
+  const allowed = isAdminUser();
+  $("admin-login-box").hidden = allowed;
+  $("admin-panel-box").hidden = !allowed;
+  $("admin-not-allowed").hidden = !adminUser || allowed;
+  $("btn-admin-login").hidden = !!adminUser && !allowed;
+  $("lbl-admin-denied-email").textContent = adminUser?.email || "";
+  if (!allowed) return;
+  $("lbl-admin-email").textContent = adminUser.email;
+  setupAdminSelectors();
+  renderAdminForm();
+  renderAdminQuestionsList();
+}
+
+function adminSignIn() {
+  signInWithPopup(auth, new GoogleAuthProvider()).catch((err) => {
+    if (err?.code !== "auth/popup-closed-by-user" && err?.code !== "auth/cancelled-popup-request") {
+      showToast("No se pudo iniciar sesión: " + (err?.message || err), "❌");
+    }
+  });
+}
+
+$("btn-open-admin").addEventListener("click", () => $("modal-admin").classList.add("active"));
+$("btn-close-admin").addEventListener("click", () => $("modal-admin").classList.remove("active"));
+$("btn-admin-login").addEventListener("click", adminSignIn);
+$("btn-admin-switch").addEventListener("click", () => signOut(auth).then(adminSignIn));
+$("btn-admin-logout").addEventListener("click", () => signOut(auth));
+
+function adminCategory() {
+  return categories.find((c) => c.id === $("admin-select-category").value) || categories[0];
+}
+
+function is18(cat) {
+  return cat?.id === "secretos_intimos";
+}
+
+function setupAdminSelectors() {
+  const catSelect = $("admin-select-category");
+  const previous = catSelect.value;
+  catSelect.innerHTML = categories.map((c) => `<option value="${c.id}">${c.icono || "🧊"} ${escapeHtml(c.titulo)}</option>`).join("");
+  if (previous) catSelect.value = previous;
+
+  const levelOptions = NIVELES_18.map((n) => `<option value="${n.lvl}">${n.icon} ${n.lvl} · ${n.title}</option>`).join("");
+  const temaOptions = TEMAS_18.map((t) => `<option value="${t.tema}">${t.icon} ${t.title}</option>`).join("");
+  if (!$("admin-q-lvl").options.length) {
+    $("admin-q-lvl").innerHTML = levelOptions;
+    $("admin-q-tema").innerHTML = temaOptions;
+    $("admin-filter-lvl").innerHTML = `<option value="">Todos los niveles</option>${levelOptions}`;
+    $("admin-filter-tema").innerHTML = `<option value="">Todos los temas</option>${temaOptions}`;
+  }
+}
+
+function renderAdminForm() {
+  const cat = adminCategory();
+  const editing = !!adminEditingId;
+  $("lbl-admin-form-title").textContent = editing ? "✏️ Editando pregunta" : "➕ Agregar pregunta";
+  $("btn-admin-save-question").textContent = editing ? "Guardar cambios" : "Agregar";
+  $("btn-admin-cancel-edit").hidden = !editing;
+  $("admin-18-fields").hidden = !is18(cat);
+  $("admin-q-opts").hidden = !is18(cat) || $("admin-q-fmt").value !== "gusto";
+  $("admin-form-hint").hidden = is18(cat);
+  $("admin-filter-lvl").hidden = !is18(cat);
+  $("admin-filter-tema").hidden = !is18(cat);
+}
+
+function resetAdminForm() {
+  adminEditingId = null;
+  $("admin-q-text").value = "";
+  $("admin-q-opts").value = "";
+  renderAdminForm();
+}
+
+function readAdminForm() {
+  const text = $("admin-q-text").value.trim();
+  if (!text) {
+    showToast("Escribe la pregunta", "✍️");
+    return null;
+  }
+  if (!is18(adminCategory())) return { t: text };
+  const q = { t: text, fmt: $("admin-q-fmt").value, lvl: Number($("admin-q-lvl").value), tema: $("admin-q-tema").value };
+  if (q.fmt === "gusto") {
+    q.opts = $("admin-q-opts").value.split("|").map((o) => o.trim()).filter(Boolean);
+    if (q.opts.length < 2) {
+      showToast("Escribe al menos 2 opciones separadas por |", "⚠️");
+      return null;
+    }
+  }
+  return q;
+}
+
+async function saveBankPatch(mutate, okMessage) {
+  const next = structuredClone({ deleted: bankPatch.deleted || [], edits: bankPatch.edits || {}, added: bankPatch.added || {} });
+  mutate(next);
+  try {
+    await setDoc(BANK_DOC, { ...next, updatedAt: serverTimestamp() });
+    showToast(okMessage, "☁️");
+    return true;
+  } catch (err) {
+    showToast("No se pudo guardar: " + friendlyError(err), "❌");
+    return false;
+  }
+}
+
+function isAddedQuestion(cat, id) {
+  return (bankPatch.added?.[cat.id] || []).some((q) => q.id === id);
+}
+
+$("admin-select-category").addEventListener("change", () => {
+  resetAdminForm();
+  renderAdminQuestionsList();
+});
+$("admin-q-fmt").addEventListener("change", renderAdminForm);
+["admin-filter-text", "admin-filter-lvl", "admin-filter-tema"].forEach((id) => $(id).addEventListener("input", renderAdminQuestionsList));
+$("btn-admin-cancel-edit").addEventListener("click", resetAdminForm);
+
+$("btn-admin-save-question").addEventListener("click", async () => {
+  const cat = adminCategory();
+  const q = readAdminForm();
+  if (!q) return;
+  const editingId = adminEditingId;
+  const ok = await saveBankPatch((patch) => {
+    if (!editingId) {
+      patch.added[cat.id] = [...(patch.added[cat.id] || []), { ...q, id: "a_" + randomId(8) }];
+    } else if (isAddedQuestion(cat, editingId)) {
+      patch.added[cat.id] = patch.added[cat.id].map((x) => (x.id === editingId ? { ...q, id: editingId } : x));
+    } else {
+      patch.edits[editingId] = { ...q, id: editingId };
+    }
+  }, editingId ? "Pregunta actualizada para todos" : "Pregunta agregada para todos");
+  if (ok) resetAdminForm();
+});
+
+$("admin-questions-list").addEventListener("click", (e) => {
+  const cat = adminCategory();
+  const editBtn = e.target.closest("[data-edit]");
+  const delBtn = e.target.closest("[data-del]");
+  if (editBtn) {
+    const q = cat.preguntas.find((x) => questionId(cat.id, x) === editBtn.dataset.edit);
+    if (!q) return;
+    adminEditingId = editBtn.dataset.edit;
+    $("admin-q-text").value = typeof q === "string" ? q : q.t;
+    if (is18(cat)) {
+      $("admin-q-fmt").value = q.fmt || "exp";
+      $("admin-q-lvl").value = String(q.lvl || 1);
+      $("admin-q-tema").value = q.tema || TEMAS_18[0].tema;
+      $("admin-q-opts").value = (q.opts || []).join(" | ");
+    }
+    renderAdminForm();
+    $("admin-form").scrollIntoView({ behavior: "smooth", block: "center" });
+  } else if (delBtn && confirm("¿Eliminar esta pregunta para todos?")) {
+    const id = delBtn.dataset.del;
+    saveBankPatch((patch) => {
+      if (isAddedQuestion(cat, id)) {
+        patch.added[cat.id] = patch.added[cat.id].filter((x) => x.id !== id);
+      } else if (!patch.deleted.includes(id)) {
+        patch.deleted.push(id);
+      }
+      delete patch.edits[id];
+    }, "Pregunta eliminada para todos");
+    if (adminEditingId === id) resetAdminForm();
   }
 });
 
-$("btn-admin-logout").addEventListener("click", () => {
-  isAdminLoggedIn = false;
-  $("admin-login-box").hidden = false;
-  $("admin-panel-box").hidden = true;
-});
-
-function showAdminPanel() {
-  $("admin-login-box").hidden = true;
-  $("admin-panel-box").hidden = false;
-  const select = $("admin-select-category");
-  const previous = select.value;
-  select.innerHTML = categories.map((c) => `<option value="${c.id}">${c.icono || "🧊"} ${escapeHtml(c.titulo)}</option>`).join("");
-  if (previous) select.value = previous;
-  renderAdminQuestionsList(select.value);
+function adminBadgesHtml(cat, q) {
+  if (is18(cat)) {
+    const nivel = NIVELES_18.find((n) => n.lvl === q.lvl);
+    const tema = TEMAS_18.find((t) => t.tema === q.tema);
+    const opts = q.fmt === "gusto" ? `<span class="admin-badge">${(q.opts || []).map(escapeHtml).join(" · ")}</span>` : "";
+    return `<span class="admin-badge">${nivel ? `${nivel.icon} ${nivel.title}` : "Sin nivel"}</span>
+      <span class="admin-badge">${tema ? `${tema.icon} ${tema.title}` : "Sin tema"}</span>
+      <span class="admin-badge">${FORMAT_LABELS[q.fmt] || "Sin formato"}</span>${opts}`;
+  }
+  const info = classifyGroupQuestion(q, cat.id);
+  const label = { suspect: "👉 Votar por alguien", choice: "🅰️ Elegir opción", yesno: "🙋 Sí o No", open: "🎤 Responder", experience: "🔥 Experiencia" }[info.type];
+  const opts = info.type === "choice" ? `<span class="admin-badge">${info.options.map(escapeHtml).join(" · ")}</span>` : "";
+  return `<span class="admin-badge">${label}</span>${opts}`;
 }
 
-$("admin-select-category").addEventListener("change", (e) => renderAdminQuestionsList(e.target.value));
-
-function renderAdminQuestionsList(catId) {
-  const cat = categories.find((c) => c.id === catId);
+function renderAdminQuestionsList() {
+  if (!isAdminUser()) return;
+  const cat = adminCategory();
   if (!cat) return;
-  $("admin-questions-count").textContent = cat.preguntas.length;
-  $("admin-questions-list").innerHTML = cat.preguntas
-    .map(
-      (q, idx) => `
+  const search = $("admin-filter-text").value.trim().toLowerCase();
+  const lvl = is18(cat) ? $("admin-filter-lvl").value : "";
+  const tema = is18(cat) ? $("admin-filter-tema").value : "";
+  const edited = new Set(Object.keys(bankPatch.edits || {}));
+
+  const rows = cat.preguntas.filter((q) => {
+    if (search && !questionText(q).toLowerCase().includes(search)) return false;
+    if (lvl && String(q.lvl) !== lvl) return false;
+    if (tema && q.tema !== tema) return false;
+    return true;
+  });
+
+  $("admin-questions-count").textContent = rows.length === cat.preguntas.length ? cat.preguntas.length : `${rows.length} de ${cat.preguntas.length}`;
+  $("admin-questions-list").innerHTML = rows
+    .map((q) => {
+      const id = questionId(cat.id, q);
+      const mark = isAddedQuestion(cat, id) ? `<span class="admin-badge is-new">Nueva</span>` : edited.has(id) ? `<span class="admin-badge is-edited">Editada</span>` : "";
+      return `
       <div class="admin-list-item">
-        <span class="admin-num">#${idx + 1}</span>
-        <span class="admin-text">${escapeHtml(q)}</span>
-        <button type="button" class="btn btn-secondary btn-xs" data-edit="${idx}" title="Editar">✏️</button>
-        <button type="button" class="btn btn-danger btn-xs" data-del="${idx}" title="Eliminar">🗑️</button>
-      </div>`
-    )
+        <div class="admin-text">
+          <span>${escapeHtml(questionText(q))}</span>
+          <div class="admin-badges">${mark}${adminBadgesHtml(cat, q)}</div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-xs" data-edit="${escapeAttr(id)}" title="Editar">✏️</button>
+        <button type="button" class="btn btn-danger btn-xs" data-del="${escapeAttr(id)}" title="Eliminar">🗑️</button>
+      </div>`;
+    })
     .join("");
 }
 
-$("admin-questions-list").addEventListener("click", (e) => {
-  const cat = categories.find((c) => c.id === $("admin-select-category").value);
-  const editBtn = e.target.closest("[data-edit]");
-  const delBtn = e.target.closest("[data-del]");
-  if (!cat) return;
-  if (editBtn) {
-    const idx = Number(editBtn.dataset.edit);
-    const nuevo = prompt("Editar pregunta:", cat.preguntas[idx]);
-    if (nuevo && nuevo.trim()) {
-      cat.preguntas[idx] = nuevo.trim();
-      saveCategories(categories);
-      renderAdminQuestionsList(cat.id);
-      showToast("Pregunta actualizada", "✓");
-    }
-  } else if (delBtn && confirm("¿Eliminar esta pregunta?")) {
-    cat.preguntas.splice(Number(delBtn.dataset.del), 1);
-    saveCategories(categories);
-    renderAdminQuestionsList(cat.id);
-    showToast("Pregunta eliminada", "🗑️");
-  }
-});
-
-$("btn-admin-add-question").addEventListener("click", () => {
-  const input = $("admin-input-new-question");
-  const text = input.value.trim();
-  const cat = categories.find((c) => c.id === $("admin-select-category").value);
-  if (!text || !cat) return;
-  cat.preguntas.push(text);
-  saveCategories(categories);
-  input.value = "";
-  renderAdminQuestionsList(cat.id);
-  showToast("Pregunta agregada", "✨");
-});
-
-$("btn-admin-export-code").addEventListener("click", () => {
-  const code = `// questions-data.js - Banco oficial de RompeHielos (8 categorías)\nexport const DEFAULT_CATEGORIES = ${JSON.stringify(categories, null, 2)};\n`;
-  const url = URL.createObjectURL(new Blob([code], { type: "application/javascript" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "questions-data.js";
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast("Descargando questions-data.js", "💾");
-});
-
 $("btn-admin-restore-defaults").addEventListener("click", () => {
-  if (!confirm("¿Descartar tus cambios y volver a las preguntas oficiales?")) return;
-  saveCategories(structuredClone(DEFAULT_CATEGORIES));
-  showAdminPanel();
-  showToast("Preguntas oficiales restauradas", "🔄");
+  if (!confirm("¿Deshacer TODOS los cambios (borradas, editadas y agregadas) y volver a las preguntas oficiales para todos?")) return;
+  saveBankPatch((patch) => {
+    patch.deleted = [];
+    patch.edits = {};
+    patch.added = {};
+  }, "Preguntas oficiales restauradas para todos");
+  resetAdminForm();
 });
 
 // ==========================================
@@ -2231,3 +2940,4 @@ renderHostStep();
 renderSoloCategories();
 setupTvCategoryBar();
 restoreRoomFromUrlOrSession();
+subscribeToBank();
