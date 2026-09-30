@@ -5,11 +5,11 @@
 //   El nivel sube según qué tan explícito es el acto, no según el lugar.
 
 export const NIVELES_18 = [
-  { lvl: 1, icon: "🌶️", title: "Coqueto", desc: "Sin mencionar sexo: besos, coqueteo, apps y celos." },
-  { lvl: 2, icon: "🌶️🌶️", title: "Atrevido", desc: "Se habla de sexo, pero sin detalles." },
-  { lvl: 3, icon: "🌶️🌶️🌶️", title: "Picante", desc: "Situaciones de riesgo y juegos en pareja." },
-  { lvl: 4, icon: "🌶️🌶️🌶️🌶️", title: "Muy picante", desc: "Más de dos personas y prácticas intensas.", warn: true },
-  { lvl: 5, icon: "🌶️🌶️🌶️🌶️🌶️", title: "Sin filtro", desc: "Prácticas específicas, dichas sin rodeos.", warn: true },
+  { lvl: 1, icon: "1🌶️", title: "Coqueto", desc: "Sin mencionar sexo: besos, coqueteo, apps y celos." },
+  { lvl: 2, icon: "2🌶️", title: "Atrevido", desc: "Se habla de sexo, pero sin detalles." },
+  { lvl: 3, icon: "3🌶️", title: "Picante", desc: "Situaciones de riesgo y juegos en pareja." },
+  { lvl: 4, icon: "4🌶️", title: "Muy picante", desc: "Más de dos personas y prácticas intensas.", warn: true },
+  { lvl: 5, icon: "5🌶️", title: "Sin filtro", desc: "Prácticas específicas, dichas sin rodeos.", warn: true },
 ];
 
 export const TEMAS_18 = [

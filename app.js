@@ -898,7 +898,7 @@ function renderHostStep() {
     const byLevel = (lvl) => pool.questions.filter((q) => q.lvl === lvl && setup.temas.has(q.tema)).length;
     const byTema = (tema) => pool.questions.filter((q) => q.tema === tema && setup.levels.has(q.lvl)).length;
     html += step2Section("Niveles de intensidad (marca los que quieran)", NIVELES_18.map((n) =>
-      toggleRowHtml({ attr: "lvl", value: n.lvl, on: setup.levels.has(n.lvl), icon: n.icon, title: `${n.lvl} · ${n.title}`, desc: n.desc, count: byLevel(n.lvl) })
+      toggleRowHtml({ attr: "lvl", value: n.lvl, on: setup.levels.has(n.lvl), icon: n.icon, title: n.title, desc: n.desc, count: byLevel(n.lvl) })
     ).join(""));
     html += step2Section("Temas", TEMAS_18.map((t) =>
       toggleRowHtml({ attr: "tema", value: t.tema, on: setup.temas.has(t.tema), icon: t.icon, title: t.title, count: byTema(t.tema) })
@@ -1498,7 +1498,7 @@ function renderPreguntas(w) {
   const revealGender = !!room.settings?.revealGender;
   const nivel = typeof question === "object" && question.lvl ? NIVELES_18.find((n) => n.lvl === question.lvl) : null;
 
-  $("game-status").textContent = `${cat?.titulo || ""} · Pregunta ${room.pos + 1} de ${room.deck.length}${nivel ? ` · ${nivel.icon}` : ""}`;
+  $("game-status").textContent = `${cat?.titulo || ""} · Pregunta ${room.pos + 1} de ${room.deck.length}${nivel ? ` · ${nivel.icon} ${nivel.title}` : ""}`;
 
   let privacy = "";
   if (info.type === "yesno" || info.type === "experience") privacy = revealGender ? "🛡️ Voto anónimo. Se ve el total y el desglose de los géneros con 3 o más personas." : "🛡️ Voto anónimo. Solo se muestra el total del grupo.";
@@ -1508,7 +1508,8 @@ function renderPreguntas(w) {
   ensurePanel(
     `preguntas|${room.gameId}|${room.round}|${room.pos}|${room.phase}`,
     `
-    <div class="question-hero">
+    <div class="question-hero ${nivel ? `lvl-${nivel.lvl}` : ""}">
+      ${nivel ? `<span class="level-badge">${nivel.icon} ${nivel.title}</span>` : ""}
       <span class="type-badge">${questionTypeLabel(info)}</span>
       <p class="question-hero-text">${escapeHtml(questionText(question))}</p>
     </div>
@@ -2624,6 +2625,7 @@ function renderTvRoom(w) {
   $("tv-players-list").innerHTML = room.state === "playing" && currentStep(room) ? playerStatusHtml(w) : playerChipsHtml(players, room.hostId, room.state === "playing" ? null : room);
   const status = $("tv-live-status");
   const headline = $("tv-main-headline");
+  $("tv-room-live").classList.remove("lvl-1", "lvl-2", "lvl-3", "lvl-4", "lvl-5");
   const results = $("tv-live-results");
   results.innerHTML = "";
 
@@ -2640,6 +2642,11 @@ function renderTvRoom(w) {
     const question = room.deck[room.pos] || "";
     const info = classifyGroupQuestion(question, room.category);
     headline.textContent = questionText(question);
+    const nivel = typeof question === "object" && question.lvl ? NIVELES_18.find((n) => n.lvl === question.lvl) : null;
+    if (nivel) {
+      $("tv-room-live").classList.add(`lvl-${nivel.lvl}`);
+      status.textContent = `${dyn.icon} ${dyn.title} · ${nivel.icon} ${nivel.title}`;
+    }
     if (info.type === "open") {
       results.innerHTML = room.speaker ? `<div class="results-headline">🎤 Responde: ${room.speaker.avatar} ${escapeHtml(room.speaker.name)}</div>` : "";
       return;
@@ -2799,7 +2806,7 @@ function setupAdminSelectors() {
   catSelect.innerHTML = categories.map((c) => `<option value="${c.id}">${c.icono || "🧊"} ${escapeHtml(c.titulo)}</option>`).join("");
   if (previous) catSelect.value = previous;
 
-  const levelOptions = NIVELES_18.map((n) => `<option value="${n.lvl}">${n.icon} ${n.lvl} · ${n.title}</option>`).join("");
+  const levelOptions = NIVELES_18.map((n) => `<option value="${n.lvl}">${n.icon} ${n.title}</option>`).join("");
   const temaOptions = TEMAS_18.map((t) => `<option value="${t.tema}">${t.icon} ${t.title}</option>`).join("");
   if (!$("admin-q-lvl").options.length) {
     $("admin-q-lvl").innerHTML = levelOptions;

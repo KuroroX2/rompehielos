@@ -2074,3 +2074,54 @@ select.input-field { cursor: pointer; }
 .modal-content.small { max-width: 420px; }
 
 .setup-players { margin: 0 0 10px; }
+
+
+/* ========== Color por nivel de intensidad (+18) ========== */
+/* 1 verde → 5 rojo intenso: la intensidad se entiende solo por el color */
+.question-hero.lvl-1, #tv-room-live.lvl-1 { --lvl: #10b981; --lvl-bg: rgba(16, 185, 129, 0.45); }
+.question-hero.lvl-2, #tv-room-live.lvl-2 { --lvl: #a3e635; --lvl-bg: rgba(132, 204, 22, 0.42); }
+.question-hero.lvl-3, #tv-room-live.lvl-3 { --lvl: #f59e0b; --lvl-bg: rgba(245, 158, 11, 0.45); }
+.question-hero.lvl-4, #tv-room-live.lvl-4 { --lvl: #f97316; --lvl-bg: rgba(234, 88, 12, 0.55); }
+.question-hero.lvl-5, #tv-room-live.lvl-5 { --lvl: #ef4444; --lvl-bg: rgba(220, 38, 38, 0.5); }
+
+.question-hero[class*="lvl-"] {
+  border: 2px solid var(--lvl);
+  background: linear-gradient(160deg, var(--lvl-bg) 0%, #101626 100%);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 34px var(--lvl-bg);
+}
+
+.question-hero.lvl-5 {
+  background: linear-gradient(160deg, rgba(220, 38, 38, 0.65) 0%, rgba(127, 29, 29, 0.55) 55%, #1a0b0f 100%);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 45px rgba(239, 68, 68, 0.55);
+  animation: lvlPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes lvlPulse {
+  0%, 100% { box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 30px rgba(239, 68, 68, 0.45); }
+  50% { box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 55px rgba(239, 68, 68, 0.75); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .question-hero.lvl-5 { animation: none; }
+}
+
+.level-badge {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--lvl);
+  color: #0b0f19;
+  margin: 0 6px 10px 0;
+}
+
+.question-hero.lvl-4 .level-badge { color: #fff; background: #ea580c; }
+.question-hero.lvl-5 .level-badge { color: #fff; background: #dc2626; }
+
+#tv-room-live[class*="lvl-"] {
+  border: 2px solid var(--lvl);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(160deg, var(--lvl-bg) 0%, transparent 80%);
+  padding: 24px 16px;
+}
