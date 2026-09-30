@@ -2053,3 +2053,24 @@ select.input-field { cursor: pointer; }
 }
 
 .host-bar .btn-skip { flex: 0 0 auto; }
+
+/* Botón "listo": sin marcar es una invitación, marcado es un bloque verde sólido */
+.ready-btn {
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+}
+
+.ready-btn .ready-main { font-size: 15px; font-weight: 800; }
+.ready-btn .ready-sub { font-size: 12px; font-weight: 600; opacity: 0.8; }
+
+.ready-btn.is-ready {
+  background: var(--emerald);
+  border: 2px solid var(--emerald);
+  color: #04221a;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.45);
+}
+
+.modal-content.small { max-width: 420px; }
+
+.setup-players { margin: 0 0 10px; }

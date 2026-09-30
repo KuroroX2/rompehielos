@@ -12,6 +12,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   updateDoc,
   deleteDoc,
   addDoc,
@@ -332,22 +333,33 @@ function getDynamic(key) {
   return ROOM_DYNAMICS.find((d) => d.key === key) || ROOM_DYNAMICS[0];
 }
 
+// El id del jugador es por dispositivo: si abre el enlace en otra pestaña sigue siendo la misma persona.
+// (Si la pestaña ya tenía un id propio se respeta, para no duplicarse al actualizar la web.)
 const profile = {
-  playerId: load("session", "rh_player_id") || "p_" + randomId(10),
+  playerId: load("session", "rh_player_id") || load("local", "rh_player_id") || "p_" + randomId(10),
   name: load("local", "rh_player_name") || "",
   avatar: load("local", "rh_player_avatar") || "🦊",
   gender: load("local", "rh_player_gender") || "hombre",
 };
 store("session", "rh_player_id", profile.playerId);
+if (!load("local", "rh_player_id")) store("local", "rh_player_id", profile.playerId);
 
 let roomWatcher = null;       // sala en la que juega este celular
 let heartbeatTimer = null;
 let selectedDynamicKey = "quien_es_mas_probable";
 let lastPanelKey = null;
 
+// Un jugador está conectado si su última señal es reciente comparada con la más reciente de la sala.
+// Todas las señales usan la hora del servidor, así no importa si el reloj de algún celular está desfasado.
 function activePlayers(players) {
-  const now = Date.now();
-  return players.filter((p) => !p.lastSeen || now - p.lastSeen < STALE_MS);
+  const newest = Math.max(0, ...players.map((p) => p.lastSeen || 0));
+  return players.filter((p) => !p.lastSeen || newest - p.lastSeen < STALE_MS);
+}
+
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value === "number") return value;
+  return typeof value.toMillis === "function" ? value.toMillis() : 0;
 }
 
 function isHost() {
@@ -439,7 +451,10 @@ function createRoomWatcher(code, onUpdate, onMissing) {
   w.unsubs.push(
     onSnapshot(collection(db, "salas", code, "players"), (snap) => {
       w.players = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
+        .map((d) => {
+          const data = d.data({ serverTimestamps: "estimate" });
+          return { id: d.id, ...data, lastSeen: toMillis(data.lastSeen), joinedAt: toMillis(data.joinedAt) };
+        })
         .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
       onUpdate(w);
     })
@@ -506,11 +521,32 @@ async function writePlayerDoc(code) {
       name: profile.name,
       avatar: profile.avatar,
       gender: profile.gender,
-      lastSeen: Date.now(),
-      ...(existing.exists() ? {} : { joinedAt: Date.now() }),
+      lastSeen: serverTimestamp(),
+      ...(existing.exists() ? {} : { joinedAt: serverTimestamp() }),
     },
     { merge: true }
   );
+  await removeGhostsWithMyName(code);
+}
+
+// Si esta misma persona quedó registrada antes con otro id (otro navegador o pestaña), se borra ese "fantasma"
+async function removeGhostsWithMyName(code) {
+  try {
+    const snap = await getDocs(collection(db, "salas", code, "players"));
+    const players = snap.docs.map((d) => {
+      const data = d.data({ serverTimestamps: "estimate" });
+      return { id: d.id, name: data.name, lastSeen: toMillis(data.lastSeen) };
+    });
+    const activeIds = new Set(activePlayers(players).map((p) => p.id));
+    const myName = profile.name.trim().toLowerCase();
+    await Promise.all(
+      players
+        .filter((p) => p.id !== profile.playerId && (p.name || "").trim().toLowerCase() === myName && !activeIds.has(p.id))
+        .map((p) => deleteDoc(doc(db, "salas", code, "players", p.id)))
+    );
+  } catch (err) {
+    console.warn("No se pudieron limpiar jugadores duplicados:", err);
+  }
 }
 
 // ---------- Crear, unirse, salir ----------
@@ -524,6 +560,7 @@ $("btn-create-room").addEventListener("click", async () => {
     await setDoc(roomRef(code), {
       code,
       hostId: profile.playerId,
+      ownerId: profile.playerId,
       state: "lobby",
       lobbyId: randomId(6),
       createdAt: serverTimestamp(),
@@ -584,7 +621,7 @@ $("input-room-code").addEventListener("keydown", (e) => {
 function enterRoom(code) {
   roomWatcher?.stop();
   lastPanelKey = null;
-  store("session", "rh_room", code);
+  store("local", "rh_room", code);
   history.replaceState(null, "", window.location.pathname);
 
   $("lobby-join-create-box").hidden = true;
@@ -599,12 +636,13 @@ function enterRoom(code) {
 
   clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
+  setTimeout(maybeClaimHost, 3000);
   if (activeViewId() !== "view-tv") switchView("view-lobby");
 }
 
 function heartbeat() {
   if (!roomWatcher) return;
-  updateDoc(doc(db, "salas", roomWatcher.code, "players", profile.playerId), { lastSeen: Date.now() }).catch(() => {});
+  updateDoc(doc(db, "salas", roomWatcher.code, "players", profile.playerId), { lastSeen: serverTimestamp() }).catch(() => {});
   maybeClaimHost();
 }
 
@@ -612,11 +650,21 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") heartbeat();
 });
 
-// Si el anfitrión se desconectó, el jugador más antiguo que siga activo toma el control
+// El dueño de la sala (quien la creó) recupera el anfitrión apenas vuelve.
+// Si el anfitrión se desconectó, el jugador más antiguo que siga conectado toma el control mientras tanto.
 function maybeClaimHost() {
   const w = roomWatcher;
   if (!w?.room || isHost()) return;
   const active = activePlayers(w.players);
+  const meActive = active.some((p) => p.id === profile.playerId);
+  if (!meActive) return;
+
+  if (w.room.ownerId === profile.playerId) {
+    updateDoc(roomRef(w.code), { hostId: profile.playerId })
+      .then(() => showToast("Volviste a ser el anfitrión", "👑"))
+      .catch(() => {});
+    return;
+  }
   const hostActive = active.some((p) => p.id === w.room.hostId);
   if (!hostActive && active[0]?.id === profile.playerId) {
     updateDoc(roomRef(w.code), { hostId: profile.playerId })
@@ -631,8 +679,7 @@ async function leaveRoom() {
   const code = w.code;
   const others = activePlayers(w.players).filter((p) => p.id !== profile.playerId);
   try {
-    if (isHost() && others.length > 0) await updateDoc(roomRef(code), { hostId: others[0].id });
-    await deleteDoc(doc(db, "salas", code, "players", profile.playerId));
+    await leaveRoomByCode(code, others);
   } catch (err) {
     console.warn("Error al salir de la sala:", err);
   }
@@ -640,11 +687,34 @@ async function leaveRoom() {
   showToast("Saliste de la sala", "👋");
 }
 
+// Sale de una sala: si este celular era anfitrión o dueño, se la deja al siguiente jugador conectado
+async function leaveRoomByCode(code, others = null) {
+  const roomSnap = await getDoc(roomRef(code));
+  if (roomSnap.exists()) {
+    const room = roomSnap.data();
+    if (!others) {
+      const snap = await getDocs(collection(db, "salas", code, "players"));
+      const players = snap.docs.map((d) => {
+        const data = d.data({ serverTimestamps: "estimate" });
+        return { id: d.id, lastSeen: toMillis(data.lastSeen), joinedAt: toMillis(data.joinedAt) };
+      }).sort((a, b) => a.joinedAt - b.joinedAt);
+      others = activePlayers(players).filter((p) => p.id !== profile.playerId);
+    }
+    const next = others[0]?.id;
+    const fields = {};
+    if (room.hostId === profile.playerId && next) fields.hostId = next;
+    if (room.ownerId === profile.playerId && next) fields.ownerId = next;
+    if (Object.keys(fields).length) await updateDoc(roomRef(code), fields);
+  }
+  await deleteDoc(doc(db, "salas", code, "players", profile.playerId));
+  if (load("local", "rh_room") === code) unstore("local", "rh_room");
+}
+
 function resetRoomUi() {
   roomWatcher?.stop();
   roomWatcher = null;
   clearInterval(heartbeatTimer);
-  unstore("session", "rh_room");
+  unstore("local", "rh_room");
   $("lobby-main-actions").hidden = false;
   $("lobby-join-create-box").hidden = false;
   $("lobby-active-room-box").hidden = true;
@@ -691,7 +761,7 @@ function lobbyKey(room) {
 }
 
 function isReady(player, room) {
-  return player.id === room.hostId || player.readyFor === lobbyKey(room);
+  return player.readyFor === lobbyKey(room);
 }
 
 function playerChipsHtml(players, hostId, room = null) {
@@ -699,7 +769,7 @@ function playerChipsHtml(players, hostId, room = null) {
     .map((p) => {
       const readyMark = room ? (isReady(p, room) ? " ✅" : " ⏳") : "";
       return `<div class="player-chip ${p.id === hostId ? "is-host" : ""}">
-        <span>${p.avatar || "👤"}</span><span>${escapeHtml(p.name)}</span>${p.id === hostId ? " 👑" : readyMark}
+        <span>${p.avatar || "👤"}</span><span>${escapeHtml(p.name)}</span>${p.id === hostId ? " 👑" : ""}${readyMark}
       </div>`;
     })
     .join("");
@@ -875,9 +945,12 @@ function updateDynamicOptions() {
   $("btn-start-dynamic").hidden = !canStart;
   $("btn-start-dynamic").textContent = usesQuestions ? `🚀 Empezar para todos (${questionCount} preguntas)` : "🚀 Empezar para todos";
   $("start-wait-msg").hidden = canStart;
+  const me = roomWatcher?.players.find((p) => p.id === profile.playerId);
+  const imReady = !!(me && roomWatcher?.room && isReady(me, roomWatcher.room));
   $("start-wait-msg").textContent =
     questionCount === 0 ? (isSpicy(dyn) ? "☝️ Marca al menos un nivel y un tema." : "☝️ Marca al menos un tipo de pregunta.")
     : ready.active.length < 2 ? "👥 Se necesitan al menos 2 jugadores para empezar."
+    : !imReady ? "✋ Tú también tienes que marcar \"listo\" en la sala de espera."
     : `⏳ Esperando que todos estén listos (${ready.readyCount} de ${ready.active.length}).`;
 }
 
@@ -921,6 +994,7 @@ function renderLobby(w) {
   const host = isHost();
   $("lbl-player-count").textContent = active.length;
   $("room-players-list").innerHTML = playerChipsHtml(active, w.room.hostId, w.room);
+  $("setup-players-list").innerHTML = playerChipsHtml(active, w.room.hostId, w.room);
   const hostPlayer = w.players.find((p) => p.id === w.room.hostId);
   $("lbl-host-indicator").textContent = host ? "👑 Eres el anfitrión" : `Anfitrión: ${hostPlayer?.name || "..."}`;
   $("host-lobby-actions").hidden = !host;
@@ -935,8 +1009,9 @@ function renderLobby(w) {
   const me = w.players.find((p) => p.id === profile.playerId);
   const imReady = me ? isReady(me, w.room) : false;
   const readyBtn = $("btn-toggle-ready");
-  readyBtn.hidden = host;
-  readyBtn.textContent = imReady ? "✅ Estoy listo (toca para cancelar)" : "✋ Estoy listo";
+  readyBtn.innerHTML = imReady
+    ? `<span class="ready-main">✅ ¡Estás listo!</span><span class="ready-sub">Toca para cancelar</span>`
+    : `<span class="ready-main">✋ Toca aquí cuando estés listo</span>`;
   readyBtn.classList.toggle("is-ready", imReady);
 
   if (host) updateDynamicOptions();
@@ -2925,24 +3000,59 @@ $("btn-fullscreen").addEventListener("click", () => {
 });
 
 // Invitación por enlace (?room=CODIGO) o volver a la sala tras recargar la página
+function showInviteForm(code) {
+  switchView("view-lobby");
+  $("invited-room-banner").hidden = false;
+  $("lbl-invited-room-code").textContent = code;
+  $("input-room-code").value = code;
+  $("join-code-container").hidden = false;
+  $("lobby-main-actions").hidden = true;
+  setTimeout(() => $("input-player-name").focus(), 300);
+}
+
+async function rejoinSavedRoom(code) {
+  const ok = await joinRoom(code, { silent: true });
+  if (!ok) unstore("local", "rh_room");
+  return ok;
+}
+
+// Invitación por enlace (?room=CODIGO) o volver a la sala tras recargar.
+// Si el enlace es de otra sala y este celular sigue en una, se pregunta si quiere cambiarse.
 async function restoreRoomFromUrlOrSession() {
-  const invited = new URLSearchParams(window.location.search).get("room");
+  // Antes la sala se guardaba por pestaña; se migra a por dispositivo
+  const legacyRoom = load("session", "rh_room");
+  unstore("session", "rh_room");
+  if (legacyRoom && !load("local", "rh_room")) store("local", "rh_room", legacyRoom);
+  const invited = new URLSearchParams(window.location.search).get("room")?.trim().toUpperCase();
+  const savedRoom = load("local", "rh_room");
+
+  if (invited && savedRoom && savedRoom !== invited && profile.name) {
+    const stillThere = (await getDoc(roomRef(savedRoom)).catch(() => null))?.exists();
+    if (stillThere) {
+      $("lbl-switch-old-room").textContent = savedRoom;
+      $("lbl-switch-new-room").textContent = invited;
+      $("modal-switch-room").classList.add("active");
+      $("btn-switch-room-yes").onclick = async () => {
+        $("modal-switch-room").classList.remove("active");
+        try { await leaveRoomByCode(savedRoom); } catch (err) { console.warn(err); }
+        if (!(await joinRoom(invited))) showInviteForm(invited);
+      };
+      $("btn-switch-room-no").onclick = async () => {
+        $("modal-switch-room").classList.remove("active");
+        history.replaceState(null, "", window.location.pathname);
+        await rejoinSavedRoom(savedRoom);
+      };
+      return;
+    }
+    unstore("local", "rh_room");
+  }
+
   if (invited) {
-    const code = invited.trim().toUpperCase();
-    switchView("view-lobby");
-    $("invited-room-banner").hidden = false;
-    $("lbl-invited-room-code").textContent = code;
-    $("input-room-code").value = code;
-    $("join-code-container").hidden = false;
-    $("lobby-main-actions").hidden = true;
-    setTimeout(() => $("input-player-name").focus(), 300);
+    if (invited === savedRoom && profile.name && (await rejoinSavedRoom(invited))) return;
+    showInviteForm(invited);
     return;
   }
-  const savedRoom = load("session", "rh_room");
-  if (savedRoom && profile.name) {
-    const ok = await joinRoom(savedRoom, { silent: true });
-    if (!ok) unstore("session", "rh_room");
-  }
+  if (savedRoom && profile.name) await rejoinSavedRoom(savedRoom);
 }
 
 initParticles();
