@@ -649,28 +649,43 @@ function heartbeat() {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") heartbeat();
 });
+window.addEventListener("focus", heartbeat);
 
 // El dueño de la sala (quien la creó) recupera el anfitrión apenas vuelve.
 // Si el anfitrión se desconectó, el jugador más antiguo que siga conectado toma el control mientras tanto.
+// Se revisa en cada cambio de la sala; hostClaimPending evita mandar la misma orden varias veces.
+let hostClaimPending = false;
+
 function maybeClaimHost() {
   const w = roomWatcher;
-  if (!w?.room || isHost()) return;
+  if (!w?.room || hostClaimPending) return;
+  const room = w.room;
   const active = activePlayers(w.players);
   const meActive = active.some((p) => p.id === profile.playerId);
   if (!meActive) return;
 
-  if (w.room.ownerId === profile.playerId) {
-    updateDoc(roomRef(w.code), { hostId: profile.playerId })
-      .then(() => showToast("Volviste a ser el anfitrión", "👑"))
-      .catch(() => {});
-    return;
+  let fields = null;
+  let message = "";
+  if (isHost()) {
+    // Salas creadas antes de existir el dueño: el anfitrión actual pasa a serlo
+    if (!room.ownerId) fields = { ownerId: profile.playerId };
+  } else if (room.ownerId === profile.playerId) {
+    fields = { hostId: profile.playerId };
+    message = "Volviste a ser el anfitrión";
+  } else {
+    const hostActive = active.some((p) => p.id === room.hostId);
+    if (!hostActive && active[0]?.id === profile.playerId) {
+      fields = { hostId: profile.playerId };
+      message = "El anfitrión se desconectó: ahora tú diriges la sala hasta que vuelva";
+    }
   }
-  const hostActive = active.some((p) => p.id === w.room.hostId);
-  if (!hostActive && active[0]?.id === profile.playerId) {
-    updateDoc(roomRef(w.code), { hostId: profile.playerId })
-      .then(() => showToast("Ahora eres el anfitrión de la sala", "👑"))
-      .catch(() => {});
-  }
+  if (!fields) return;
+
+  hostClaimPending = true;
+  updateDoc(roomRef(w.code), fields)
+    .then(() => message && showToast(message, "👑"))
+    .catch(() => {})
+    .finally(() => { hostClaimPending = false; });
 }
 
 async function leaveRoom() {
@@ -1031,6 +1046,7 @@ $("btn-toggle-ready").addEventListener("click", async () => {
 
 function onRoomUpdate(w) {
   if (!w.room) return;
+  maybeClaimHost();
   renderLobby(w);
   const view = activeViewId();
   if (w.room.state === "playing") {
