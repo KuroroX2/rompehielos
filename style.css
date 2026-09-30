@@ -2129,3 +2129,6 @@ select.input-field { cursor: pointer; }
 /* Jugadores que el anfitrión puede tocar para expulsar */
 .kickable { cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
 .kickable:hover { border-color: var(--coral); background: var(--coral-soft); }
+
+.action-choice { flex-direction: column; gap: 2px; }
+.action-choice small { font-size: 12px; font-weight: 600; opacity: 0.8; }

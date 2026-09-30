@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="style.css?v=20260930121011">
+  <link rel="stylesheet" href="style.css?v=20260930121502">
 </head>
 <body>
 
@@ -410,6 +410,22 @@
     </div>
   </div>
 
+  <!-- ========== EXPULSAR / BANEAR ========== -->
+  <div class="modal-overlay" id="modal-player-actions">
+    <div class="modal-content small">
+      <h3 class="panel-title">¿Qué hacemos con <span id="lbl-player-action-name"></span>?</h3>
+      <div class="stack">
+        <button type="button" class="btn btn-secondary btn-block action-choice" id="btn-kick-player">
+          <span>🚪 Expulsar</span><small>Sale de la sala, pero puede volver a entrar</small>
+        </button>
+        <button type="button" class="btn btn-danger btn-block action-choice" id="btn-ban-player">
+          <span>⛔ Banear</span><small>Sale de la sala y no puede volver a entrar</small>
+        </button>
+        <button type="button" class="btn btn-ghost btn-block" id="btn-cancel-player-action">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== CAMBIAR DE SALA ========== -->
   <div class="modal-overlay" id="modal-switch-room">
     <div class="modal-content small">
@@ -438,6 +454,6 @@
     <div>RompeHielos 🧊 Rompe el hielo donde sea</div>
   </footer>
 
-  <script type="module" src="app.js?v=20260930121011"></script>
+  <script type="module" src="app.js?v=20260930121502"></script>
 </body>
 </html>

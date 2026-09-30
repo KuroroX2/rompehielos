@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20260930121011";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20260930121011";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20260930121011";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20260930121011";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20260930121011";
+import { firebaseConfig } from "./firebase-config.js?v=20260930121502";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20260930121502";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20260930121502";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20260930121502";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20260930121502";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -595,8 +595,8 @@ async function joinRoom(rawCode, { silent = false } = {}) {
       if (!silent) showToast(`La sala ${code} no existe o ya se cerró`, "❌");
       return false;
     }
-    if (wasKicked(snap.data())) {
-      showToast(`El anfitrión te sacó de la sala ${code}`, "🚪");
+    if (wasBanned(snap.data())) {
+      showToast(`El anfitrión te baneó de la sala ${code}: no puedes volver a entrar`, "⛔");
       return false;
     }
     await writePlayerDoc(code);
@@ -692,36 +692,59 @@ function maybeClaimHost() {
     .finally(() => { hostClaimPending = false; });
 }
 
-// ---------- Expulsar (solo el anfitrión) ----------
-// Se borra al jugador y se anota en la lista de expulsados para que no pueda volver a entrar a esta sala
-async function kickPlayer(playerId, name) {
+// ---------- Expulsar o banear (solo el anfitrión) ----------
+// Expulsar: se borra al jugador de la sala; puede volver a entrar con el código o el enlace.
+// Banear: además queda en la lista de baneados y no puede volver a entrar a esta sala.
+let playerActionTarget = null;
+
+function openPlayerActions(playerId, name) {
+  if (!isHost() || playerId === profile.playerId) return;
+  playerActionTarget = { playerId, name };
+  $("lbl-player-action-name").textContent = name;
+  $("modal-player-actions").classList.add("active");
+}
+
+function closePlayerActions() {
+  playerActionTarget = null;
+  $("modal-player-actions").classList.remove("active");
+}
+
+async function removePlayer({ ban }) {
   const w = roomWatcher;
-  if (!w || !isHost() || playerId === profile.playerId) return;
-  if (!confirm(`¿Expulsar a ${name} de la sala?`)) return;
+  const target = playerActionTarget;
+  closePlayerActions();
+  if (!w || !target || !isHost()) return;
   try {
-    const kicked = [...new Set([...(w.room.kicked || []), playerId])];
-    const fields = { kicked };
-    if (w.room.ownerId === playerId) fields.ownerId = profile.playerId;
-    await updateDoc(roomRef(w.code), fields);
-    await deleteDoc(doc(db, "salas", w.code, "players", playerId));
-    showToast(`${name} fue expulsado/a de la sala`, "🚪");
+    const fields = {};
+    if (ban) fields.banned = [...new Set([...(w.room.banned || []), target.playerId])];
+    if (w.room.ownerId === target.playerId) fields.ownerId = profile.playerId;
+    if (Object.keys(fields).length) await updateDoc(roomRef(w.code), fields);
+    await deleteDoc(doc(db, "salas", w.code, "players", target.playerId));
+    showToast(ban ? `${target.name} fue baneado/a de la sala` : `${target.name} fue expulsado/a (puede volver a entrar)`, ban ? "⛔" : "🚪");
   } catch (err) {
-    showToast("No se pudo expulsar: " + friendlyError(err), "❌");
+    showToast("No se pudo sacar al jugador: " + friendlyError(err), "❌");
   }
 }
 
 document.addEventListener("click", (e) => {
   const chip = e.target.closest("[data-kick]");
-  if (chip) kickPlayer(chip.dataset.kick, chip.dataset.kickName);
+  if (chip) openPlayerActions(chip.dataset.kick, chip.dataset.kickName);
 });
+$("btn-kick-player").addEventListener("click", () => removePlayer({ ban: false }));
+$("btn-ban-player").addEventListener("click", () => removePlayer({ ban: true }));
+$("btn-cancel-player-action").addEventListener("click", closePlayerActions);
 
-function wasKicked(room) {
-  return (room?.kicked || []).includes(profile.playerId);
+// "kicked" era la lista de la versión anterior, donde expulsar era permanente
+function wasBanned(room) {
+  return [...(room?.banned || []), ...(room?.kicked || [])].includes(profile.playerId);
 }
+
+let leavingRoom = false;
 
 async function leaveRoom() {
   const w = roomWatcher;
   if (!w) return;
+  leavingRoom = true;
   const code = w.code;
   const others = activePlayers(w.players).filter((p) => p.id !== profile.playerId);
   try {
@@ -730,6 +753,7 @@ async function leaveRoom() {
     console.warn("Error al salir de la sala:", err);
   }
   resetRoomUi();
+  leavingRoom = false;
   showToast("Saliste de la sala", "👋");
 }
 
@@ -1081,10 +1105,14 @@ $("btn-toggle-ready").addEventListener("click", async () => {
 
 function onRoomUpdate(w) {
   if (!w.room) return;
-  if (wasKicked(w.room)) {
-    showToast("El anfitrión te sacó de la sala", "🚪");
+  const meInRoom = w.players.some((p) => p.id === profile.playerId);
+  if (meInRoom) w.sawMe = true;
+  if (!leavingRoom && (wasBanned(w.room) || (w.sawMe && !meInRoom))) {
+    const banned = wasBanned(w.room);
+    const code = w.code;
     resetRoomUi();
     switchView("view-lobby");
+    showToast(banned ? "El anfitrión te baneó de la sala" : `El anfitrión te sacó de la sala. Puedes volver a entrar con el código ${code}`, banned ? "⛔" : "🚪");
     return;
   }
   maybeClaimHost();
