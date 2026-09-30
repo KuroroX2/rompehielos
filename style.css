@@ -2051,3 +2051,5 @@ select.input-field { cursor: pointer; }
   .admin-filters { grid-template-columns: 1fr 1fr; }
   .admin-filters input { grid-column: 1 / -1; }
 }
+
+.host-bar .btn-skip { flex: 0 0 auto; }

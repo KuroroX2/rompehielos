@@ -1481,7 +1481,10 @@ function renderPreguntas(w) {
       ? { action: "to-guess", label: "🎯 ¡A adivinar!", cls: "btn-purple" }
       : { action: "show-results", label: "📊 Mostrar resultados", cls: "btn-purple" };
     $("game-host-bar").innerHTML = host
-      ? hostButtons([everyoneVoted ? nextStep : { ...nextStep, label: `⏳ Esperando a todos (${votes.length} de ${players.length})`, disabled: true }])
+      ? hostButtons([
+          everyoneVoted ? nextStep : { ...nextStep, label: `⏳ Esperando a todos (${votes.length} de ${players.length})`, disabled: true },
+          SKIP_BUTTON,
+        ])
       : nonHostNote("Cuando todos voten, el anfitrión sigue.");
     return;
   }
@@ -1500,9 +1503,12 @@ function renderPreguntas(w) {
     $("g-results").innerHTML = "";
     const allGuessed = allDone(guesses, players.length);
     $("game-host-bar").innerHTML = host
-      ? hostButtons([allGuessed
-          ? { action: "show-results", label: "📊 Mostrar resultados", cls: "btn-purple" }
-          : { action: "show-results", label: `⏳ Esperando apuestas (${guesses} de ${players.length})`, cls: "btn-purple", disabled: true }])
+      ? hostButtons([
+          allGuessed
+            ? { action: "show-results", label: "📊 Mostrar resultados", cls: "btn-purple" }
+            : { action: "show-results", label: `⏳ Esperando apuestas (${guesses} de ${players.length})`, cls: "btn-purple", disabled: true },
+          SKIP_BUTTON,
+        ])
       : nonHostNote("Cuando todos apuesten, el anfitrión muestra los resultados.");
     return;
   }
@@ -1529,6 +1535,9 @@ function renderPreguntas(w) {
 function allDone(doneCount, expectedCount) {
   return expectedCount > 0 && doneCount >= expectedCount;
 }
+
+// Saltar pasa a la siguiente pregunta sin mostrar nada de la actual (preguntas incómodas o aburridas)
+const SKIP_BUTTON = { action: "next-question", label: "⏭️ Saltar", cls: "btn-secondary btn-skip" };
 
 // Un solo botón para el anfitrión: desactivado mientras falten votos, luego "Mostrar" y después "Siguiente"
 function revealOrNext(shown, everyoneDone, doneCount, expected, revealAction, revealLabel, nextAction, nextLabel) {
@@ -1886,7 +1895,10 @@ function renderDuo(w) {
   if (revealed) $("g-results").innerHTML = duoRevealHtml(answers, info);
 
   $("game-host-bar").innerHTML = isHost()
-    ? hostButtons([revealOrNext(revealed, everyoneAnswered, answers.length, players.length, "duo-reveal", "👀 Revelar respuestas", "duo-next", "Siguiente pregunta ➔")])
+    ? hostButtons([
+        revealOrNext(revealed, everyoneAnswered, answers.length, players.length, "duo-reveal", "👀 Revelar respuestas", "duo-next", "Siguiente pregunta ➔"),
+        ...(revealed ? [] : [{ ...SKIP_BUTTON, action: "duo-next" }]),
+      ])
     : nonHostNote(revealed ? "El anfitrión pasa a la siguiente pregunta." : "El anfitrión revela las respuestas cuando todos respondan.");
 }
 
