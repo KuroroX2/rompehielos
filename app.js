@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js";
-import { DEFAULT_CATEGORIES } from "./questions-data.js";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js";
+import { firebaseConfig } from "./firebase-config.js?v=20260930115102";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20260930115102";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20260930115102";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20260930115102";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20260930115102";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -1024,6 +1024,7 @@ function renderLobby(w) {
   const me = w.players.find((p) => p.id === profile.playerId);
   const imReady = me ? isReady(me, w.room) : false;
   const readyBtn = $("btn-toggle-ready");
+  readyBtn.hidden = false;
   readyBtn.innerHTML = imReady
     ? `<span class="ready-main">✅ ¡Estás listo!</span><span class="ready-sub">Toca para cancelar</span>`
     : `<span class="ready-main">✋ Toca aquí cuando estés listo</span>`;
