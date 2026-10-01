@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20260930121502";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20260930121502";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20260930121502";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20260930121502";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20260930121502";
+import { firebaseConfig } from "./firebase-config.js?v=20261001173320";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261001173320";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261001173320";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261001173320";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261001173320";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -1240,7 +1240,7 @@ async function castVote(value, label, extra = {}) {
   const room = w?.room;
   if (!room || getMyVote(room)) return;
   const token = randomId(16);
-  store("session", voteStorageKey(room), JSON.stringify({ value, label }));
+  store("session", voteStorageKey(room), JSON.stringify({ voted: true }));
   renderGame(w);
   try {
     await setDoc(doc(db, "salas", w.code, `v_${room.gameId}_${room.round}`, token), { value, ...extra });
@@ -1480,8 +1480,9 @@ function voteButtonsHtml(buttons) {
     .join("")}</div>`;
 }
 
-function votedHtml(myVote) {
-  return `<div class="voted-status">✓ Tu voto: <strong>${escapeHtml(myVote.label)}</strong></div>`;
+// No se muestra qué votaste: así no hay que esconder el celular después de votar
+function votedHtml() {
+  return `<div class="voted-status">✓ Votaste · tu voto es secreto 🤫</div>`;
 }
 
 function hostButtons(buttons) {
