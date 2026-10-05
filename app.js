@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261005202748";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005202748";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005202748";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005202748";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005202748";
+import { firebaseConfig } from "./firebase-config.js?v=20261005204059";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005204059";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005204059";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005204059";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005204059";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
