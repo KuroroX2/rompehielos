@@ -345,7 +345,7 @@ const RAW = {
     [4, "gusto", "¿Qué te da más curiosidad?", ["Cuerdas y amarras", "Látigos", "Juguetes a control remoto", "Máquinas sexuales", "Nada"]],
     [5, "exp", "Usar un plug anal con cola o joya"],
     [5, "exp", "Usar dilatadores anales"],
-    [5, "exp", "Usar un juguete de electroestimulación"],
+    [5, "exp", "Usar un juguete de electroestimulación (electroshocks)"],
     [5, "exp", "Usar un dildo doble con arnés"],
     [5, "exp", "Usar un vibrador anal en público"],
   ],
