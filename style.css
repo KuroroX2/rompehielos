@@ -6,25 +6,25 @@
    ========================================================== */
 :root {
   /* Mesa */
-  --bg: oklch(0.17 0.012 35);
-  --surface: oklch(0.215 0.013 35);
-  --surface-2: oklch(0.26 0.015 35);
-  --surface-3: oklch(0.30 0.016 35);
-  --line: oklch(0.34 0.015 35);
-  --line-strong: oklch(0.46 0.02 35);
+  --bg: oklch(0.17 0.012 235);
+  --surface: oklch(0.215 0.013 235);
+  --surface-2: oklch(0.26 0.015 235);
+  --surface-3: oklch(0.30 0.016 235);
+  --line: oklch(0.34 0.015 235);
+  --line-strong: oklch(0.46 0.02 235);
 
   /* Texto */
-  --ink: oklch(0.97 0.006 70);
-  --ink-muted: oklch(0.80 0.012 60);
-  --ink-dim: oklch(0.70 0.012 60);
-  --ink-dark: oklch(0.20 0.02 35);
+  --ink: oklch(0.97 0.006 220);
+  --ink-muted: oklch(0.81 0.015 225);
+  --ink-dim: oklch(0.71 0.015 225);
+  --ink-dark: oklch(0.20 0.03 235);
 
-  /* Acento de interfaz: ají */
-  --aji: oklch(0.70 0.19 33);
-  --aji-hover: oklch(0.75 0.17 38);
-  --aji-ink: oklch(0.19 0.03 33);
-  --aji-soft: oklch(0.70 0.19 33 / 0.16);
-  --aji-line: oklch(0.70 0.19 33 / 0.55);
+  /* Acento de interfaz: hielo (celeste) */
+  --hielo: oklch(0.82 0.12 222);
+  --hielo-hover: oklch(0.87 0.10 222);
+  --hielo-ink: oklch(0.20 0.05 240);
+  --hielo-soft: oklch(0.82 0.12 222 / 0.15);
+  --hielo-line: oklch(0.82 0.12 222 / 0.55);
 
   /* Estados */
   --ok: oklch(0.80 0.15 150);
@@ -38,15 +38,15 @@
   --bad-line: oklch(0.72 0.17 22 / 0.5);
 
   /* Colores para datos (barras, géneros, opciones). Los nombres viejos se mantienen porque app.js los usa */
-  --cyan: oklch(0.80 0.10 225);
+  --cyan: oklch(0.80 0.10 200);
   --pink: oklch(0.76 0.14 350);
   --purple: oklch(0.76 0.11 300);
-  --coral: var(--aji);
+  --coral: oklch(0.74 0.15 25);
   --emerald: var(--ok);
   --amber: var(--warn);
 
   /* Carta por defecto: naipe claro */
-  --card: oklch(0.95 0.012 70);
+  --card: oklch(0.95 0.015 220);
   --card-ink: var(--ink-dark);
 
   --radius-sm: 8px;
@@ -67,19 +67,19 @@
 }
 
 /* ========== Mazos: un color por temática ========== */
-[data-deck="citas_nivel1"]          { --card: oklch(0.86 0.09 50);  --card-ink: oklch(0.22 0.04 40); }
-[data-deck="citas_nivel2"]          { --card: oklch(0.80 0.11 10);  --card-ink: oklch(0.22 0.04 10); }
-[data-deck="citas_nivel3"]          { --card: oklch(0.47 0.15 15);  --card-ink: oklch(0.97 0.01 30); }
-[data-deck="dilemas_absurdos"]      { --card: oklch(0.87 0.14 98);  --card-ink: oklch(0.24 0.04 90); }
-[data-deck="amigos_fiesta"]         { --card: oklch(0.76 0.15 58);  --card-ink: oklch(0.22 0.04 50); }
-[data-deck="empresas_trabajo"]      { --card: oklch(0.74 0.08 205); --card-ink: oklch(0.20 0.03 210); }
-[data-deck="quien_es_mas_probable"] { --card: oklch(0.82 0.12 155); --card-ink: oklch(0.22 0.04 155); }
-[data-deck="reunion_hombres"]       { --card: oklch(0.78 0.09 245); --card-ink: oklch(0.20 0.04 250); }
-[data-deck="reunion_mujeres"]       { --card: oklch(0.76 0.13 345); --card-ink: oklch(0.22 0.04 345); }
+[data-deck="citas_nivel1"]          { --card: oklch(0.89 0.07 215); --card-ink: oklch(0.22 0.05 235); }
+[data-deck="citas_nivel2"]          { --card: oklch(0.85 0.09 188); --card-ink: oklch(0.22 0.05 200); }
+[data-deck="citas_nivel3"]          { --card: oklch(0.45 0.13 255); --card-ink: oklch(0.97 0.01 230); }
+[data-deck="dilemas_absurdos"]      { --card: oklch(0.88 0.10 165); --card-ink: oklch(0.22 0.05 170); }
+[data-deck="amigos_fiesta"]         { --card: oklch(0.78 0.12 200); --card-ink: oklch(0.20 0.05 215); }
+[data-deck="empresas_trabajo"]      { --card: oklch(0.76 0.07 240); --card-ink: oklch(0.20 0.04 245); }
+[data-deck="quien_es_mas_probable"] { --card: oklch(0.83 0.08 280); --card-ink: oklch(0.22 0.05 280); }
+[data-deck="reunion_hombres"]       { --card: oklch(0.72 0.12 255); --card-ink: oklch(0.18 0.05 260); }
+[data-deck="reunion_mujeres"]       { --card: oklch(0.81 0.09 320); --card-ink: oklch(0.22 0.05 320); }
 [data-deck="secretos_intimos"]      { --card: oklch(0.50 0.19 25);  --card-ink: oklch(0.97 0.01 30); }
-[data-deck="confesiones"]           { --card: oklch(0.78 0.09 300); --card-ink: oklch(0.21 0.04 300); }
-[data-deck="salas"]                 { --card: var(--aji);           --card-ink: var(--aji-ink); }
-[data-deck="tv"]                    { --card: oklch(0.80 0.09 225); --card-ink: oklch(0.20 0.03 230); }
+[data-deck="confesiones"]           { --card: oklch(0.76 0.10 295); --card-ink: oklch(0.21 0.05 295); }
+[data-deck="salas"]                 { --card: var(--hielo);           --card-ink: var(--hielo-ink); }
+[data-deck="tv"]                    { --card: oklch(0.85 0.09 188); --card-ink: oklch(0.22 0.05 200); }
 
 /* +18: el nivel manda sobre el mazo (1 verde → 5 rojo intenso; siempre con número y nombre) */
 .lvl-1 { --card: oklch(0.80 0.14 150); --card-ink: oklch(0.21 0.04 150); --lvl: var(--card); }
@@ -111,7 +111,7 @@ body { line-height: 1.45; }
 button, input, select, textarea { font-family: inherit; }
 
 :focus-visible {
-  outline: 2px solid var(--aji);
+  outline: 2px solid var(--hielo);
   outline-offset: 2px;
 }
 
@@ -147,12 +147,12 @@ h1, h2, h3, h4 { text-wrap: balance; }
   cursor: pointer;
 }
 
-/* Marca: una carta ají inclinada */
+/* Marca: una carta celeste inclinada */
 .brand-mark {
   width: 20px;
   height: 28px;
   border-radius: 4px;
-  background: var(--aji);
+  background: var(--hielo);
   transform: rotate(-10deg);
   box-shadow: 5px 1px 0 -1px var(--surface-3);
   position: relative;
@@ -163,7 +163,7 @@ h1, h2, h3, h4 { text-wrap: balance; }
   content: "";
   position: absolute;
   inset: 3px;
-  border: 1.5px solid oklch(0.19 0.03 33 / 0.35);
+  border: 1.5px solid oklch(0.20 0.05 240 / 0.35);
   border-radius: 2px;
 }
 
@@ -291,7 +291,7 @@ h1, h2, h3, h4 { text-wrap: balance; }
 }
 
 /* Antes era texto con degradado: ahora un color sólido */
-.text-gradient { color: var(--aji); }
+.text-gradient { color: var(--hielo); }
 
 /* ========== Inicio ========== */
 .hero {
@@ -360,9 +360,9 @@ h1, h2, h3, h4 { text-wrap: balance; }
   transition: transform 0.3s var(--ease-out);
 }
 
-.mode-card.card-solo { --card: oklch(0.86 0.09 50); --card-ink: oklch(0.22 0.04 40); }
-.mode-card.card-multi { --card: var(--aji); --card-ink: var(--aji-ink); }
-.mode-card.card-tv { --card: oklch(0.80 0.09 225); --card-ink: oklch(0.20 0.03 230); }
+.mode-card.card-solo { --card: oklch(0.92 0.05 215); --card-ink: oklch(0.22 0.05 235); }
+.mode-card.card-multi { --card: var(--hielo); --card-ink: var(--hielo-ink); }
+.mode-card.card-tv { --card: oklch(0.85 0.09 188); --card-ink: oklch(0.22 0.05 200); }
 
 .mode-card:nth-child(1) { transform: rotate(-1.2deg); }
 .mode-card:nth-child(3) { transform: rotate(1deg); }
@@ -609,8 +609,8 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .dual-side-bar.top-edge { transform: rotate(180deg); }
 
 .dual-side-bar.active-player {
-  border-color: var(--aji-line);
-  background: var(--aji-soft);
+  border-color: var(--hielo-line);
+  background: var(--hielo-soft);
   color: var(--ink);
 }
 
@@ -626,8 +626,8 @@ h1, h2, h3, h4 { text-wrap: balance; }
   border-radius: 50%;
 }
 
-.p1-dot { background: var(--aji); }
-.p2-dot { background: var(--cyan); }
+.p1-dot { background: var(--hielo); }
+.p2-dot { background: var(--pink); }
 
 .solo-rotating-arena {
   flex: 1;
@@ -762,13 +762,13 @@ h1, h2, h3, h4 { text-wrap: balance; }
 /* Acción principal: ají sólido con texto oscuro */
 .btn-primary,
 .btn-purple {
-  background: var(--aji);
-  color: var(--aji-ink);
+  background: var(--hielo);
+  color: var(--hielo-ink);
   font-weight: 800;
 }
 
 .btn-primary:hover:not(:disabled),
-.btn-purple:hover:not(:disabled) { background: var(--aji-hover); }
+.btn-purple:hover:not(:disabled) { background: var(--hielo-hover); }
 
 .btn-primary:disabled,
 .btn-purple:disabled {
@@ -827,7 +827,7 @@ h1, h2, h3, h4 { text-wrap: balance; }
 
 .input-field::placeholder { color: var(--ink-dim); }
 
-.input-field:focus { border-color: var(--aji); }
+.input-field:focus { border-color: var(--hielo); }
 
 textarea.input-field { resize: none; margin-bottom: 12px; }
 select.input-field { cursor: pointer; }
@@ -870,8 +870,8 @@ select.input-field { cursor: pointer; }
 .segmented-opt:hover { border-color: var(--line-strong); }
 
 .segmented-opt.selected {
-  border-color: var(--aji);
-  background: var(--aji-soft);
+  border-color: var(--hielo);
+  background: var(--hielo-soft);
   color: var(--ink);
 }
 
@@ -894,7 +894,7 @@ select.input-field { cursor: pointer; }
 .switch-row input[type="checkbox"] {
   width: 22px;
   height: 22px;
-  accent-color: var(--aji);
+  accent-color: var(--hielo);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -933,13 +933,13 @@ select.input-field { cursor: pointer; }
   padding-top: 6px;
 }
 
-/* El código de la sala es una carta ají */
+/* El código de la sala es una carta celeste */
 .room-code-badge {
   display: block;
   width: 100%;
   position: relative;
-  background: var(--aji);
-  color: var(--aji-ink);
+  background: var(--hielo);
+  color: var(--hielo-ink);
   border: none;
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -953,7 +953,7 @@ select.input-field { cursor: pointer; }
   content: "";
   position: absolute;
   inset: 6px;
-  border: 1.5px dashed oklch(0.19 0.03 33 / 0.35);
+  border: 1.5px dashed oklch(0.20 0.05 240 / 0.35);
   border-radius: 12px;
   pointer-events: none;
 }
@@ -999,8 +999,8 @@ select.input-field { cursor: pointer; }
 }
 
 .avatar-opt.selected {
-  border-color: var(--aji);
-  background: var(--aji-soft);
+  border-color: var(--hielo);
+  background: var(--hielo-soft);
   transform: scale(1.08);
 }
 
@@ -1059,8 +1059,8 @@ select.input-field { cursor: pointer; }
 .dynamic-card-radio:hover { border-color: var(--line-strong); }
 
 .dynamic-card-radio.selected {
-  border-color: var(--aji);
-  background: var(--aji-soft);
+  border-color: var(--hielo);
+  background: var(--hielo-soft);
 }
 
 .dyn-icon { font-size: 22px; }
@@ -1108,8 +1108,8 @@ select.input-field { cursor: pointer; }
 }
 
 .status-chip.is-turn {
-  background: var(--aji-soft);
-  border-color: var(--aji-line);
+  background: var(--hielo-soft);
+  border-color: var(--hielo-line);
   color: var(--ink);
 }
 
@@ -1147,7 +1147,7 @@ select.input-field { cursor: pointer; }
   color: var(--card-ink);
 }
 
-.question-hero.purple { --card: oklch(0.78 0.09 300); --card-ink: oklch(0.21 0.04 300); }
+.question-hero.purple { --card: oklch(0.76 0.10 295); --card-ink: oklch(0.21 0.05 295); }
 
 .voting-options-grid {
   display: grid;
@@ -1175,7 +1175,7 @@ select.input-field { cursor: pointer; }
 
 .vote-btn:hover {
   background: var(--surface-2);
-  border-color: var(--aji);
+  border-color: var(--hielo);
 }
 
 .vote-btn:active { transform: scale(0.98); }
@@ -1245,8 +1245,8 @@ select.input-field { cursor: pointer; }
 }
 
 .speaker-card.is-me {
-  border-color: var(--aji);
-  background: var(--aji-soft);
+  border-color: var(--hielo);
+  background: var(--hielo-soft);
   color: var(--ink);
 }
 
@@ -1297,7 +1297,7 @@ select.input-field { cursor: pointer; }
   padding: 12px 14px;
 }
 
-.result-row.is-top { border-color: var(--aji); background: var(--aji-soft); }
+.result-row.is-top { border-color: var(--hielo); background: var(--hielo-soft); }
 
 .result-row-head {
   display: flex;
@@ -1360,7 +1360,7 @@ select.input-field { cursor: pointer; }
 .author-reveal {
   text-align: center;
   background: var(--surface);
-  border: 1.5px solid var(--aji);
+  border: 1.5px solid var(--hielo);
   border-radius: var(--radius-lg);
   padding: 16px;
   margin: 14px 0;
@@ -1461,8 +1461,8 @@ select.input-field { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--aji-soft);
-  border: 1.5px solid var(--aji-line);
+  background: var(--hielo-soft);
+  border: 1.5px solid var(--hielo-line);
   border-radius: var(--radius-md);
   padding: 12px 14px;
   margin-bottom: 8px;
@@ -1494,8 +1494,8 @@ select.input-field { cursor: pointer; }
 }
 
 .type-toggle.selected {
-  border-color: var(--aji);
-  background: var(--aji-soft);
+  border-color: var(--hielo);
+  background: var(--hielo-soft);
   color: var(--ink);
 }
 
@@ -1513,9 +1513,9 @@ select.input-field { cursor: pointer; }
 }
 
 .type-toggle.selected .type-check {
-  background: var(--aji);
-  border-color: var(--aji);
-  color: var(--aji-ink);
+  background: var(--hielo);
+  border-color: var(--hielo);
+  color: var(--hielo-ink);
 }
 
 .type-icon { font-size: 22px; }
@@ -1622,7 +1622,7 @@ select.input-field { cursor: pointer; }
 .tv-code-value {
   font-size: 40px;
   font-weight: 800;
-  color: var(--aji);
+  color: var(--hielo);
   letter-spacing: 0.12em;
 }
 
@@ -1707,7 +1707,7 @@ select.input-field { cursor: pointer; }
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: oklch(0.10 0.01 35 / 0.82);
+  background: oklch(0.10 0.015 235 / 0.82);
   z-index: var(--z-modal);
   display: flex;
   align-items: center;
@@ -1899,7 +1899,7 @@ select.input-field { cursor: pointer; }
   text-underline-offset: 4px;
 }
 
-.footer-link-btn:hover { color: var(--aji); }
+.footer-link-btn:hover { color: var(--hielo); }
 
 /* ========== Experiencia (+18) y Adivina cuántos ========== */
 .vote-btn.exp-0 { border-color: var(--ok-line); background: var(--ok-soft); }
@@ -1934,7 +1934,7 @@ select.input-field { cursor: pointer; }
   gap: 4px;
   text-align: center;
   background: var(--surface);
-  border: 1.5px solid var(--aji-line);
+  border: 1.5px solid var(--hielo-line);
   border-radius: var(--radius-md);
   padding: 12px;
   margin-top: 12px;
@@ -1998,12 +1998,12 @@ select.input-field { cursor: pointer; }
   transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
 }
 
-.cartel-chip:hover:not(:disabled) { border-color: var(--aji); }
+.cartel-chip:hover:not(:disabled) { border-color: var(--hielo); }
 
 .cartel-chip.selected {
-  background: var(--aji);
-  border-color: var(--aji);
-  color: var(--aji-ink);
+  background: var(--hielo);
+  border-color: var(--hielo);
+  color: var(--hielo-ink);
 }
 
 .cartel-chip:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -2018,8 +2018,8 @@ select.input-field { cursor: pointer; }
 }
 
 .persona-hero {
-  --card: oklch(0.80 0.10 75);
-  --card-ink: oklch(0.22 0.04 70);
+  --card: oklch(0.86 0.08 200);
+  --card-ink: oklch(0.22 0.05 215);
   text-align: center;
   padding: 24px 18px;
   margin-bottom: 12px;
@@ -2030,7 +2030,7 @@ select.input-field { cursor: pointer; }
 .persona-hero .eyebrow,
 .persona-hero .panel-desc { color: color-mix(in oklch, var(--card-ink) 78%, var(--card)); }
 
-.persona-hero.is-me { --card: var(--aji); --card-ink: var(--aji-ink); }
+.persona-hero.is-me { --card: var(--hielo); --card-ink: var(--hielo-ink); }
 .persona-hero.is-me p { font-weight: 800; margin-top: 4px; }
 
 .gift-list {

@@ -2,7 +2,7 @@
 
 ## Escena
 
-Un grupo en un bar o un living con poca luz, de noche, el celular en una mano y un vaso en la otra; la app tiene que leerse de un vistazo y no encandilar. Por eso: **mesa oscura y cálida, cartas de color sólido encima**.
+Un grupo en un bar o un living con poca luz, de noche, el celular en una mano y un vaso en la otra; la app tiene que leerse de un vistazo y no encandilar. Por eso: **mesa oscura de noche helada, cartas de color sólido encima**.
 
 ## Concepto: cartas de juego
 
@@ -12,18 +12,18 @@ Un grupo en un bar o un living con poca luz, de noche, el celular en una mano y 
 
 ## Color (OKLCH)
 
-Estrategia: **mesa restringida + mazos de color**. El único acento de interfaz es el **ají** (rojo anaranjado chileno); los colores de los mazos solo viven en las cartas.
+Estrategia: **mesa restringida + mazos de color**. El único acento de interfaz es el **hielo** (celeste); los mazos usan la familia fría (celestes, aguas, menta, lavanda); los colores de los mazos solo viven en las cartas.
 
 | Token | Valor | Uso |
 |---|---|---|
-| `--bg` | `oklch(0.17 0.012 35)` | Mesa (fondo) |
+| `--bg` | `oklch(0.17 0.012 235)` | Mesa (fondo) |
 | `--surface` / `--surface-2` | `0.215` / `0.26` | Paneles y controles |
-| `--line` | `oklch(0.34 0.015 35)` | Bordes |
+| `--line` | `oklch(0.34 0.015 235)` | Bordes |
 | `--ink` / `--ink-muted` / `--ink-dim` | `0.97` / `0.80` / `0.68` | Texto (todo ≥ 4.5:1 sobre superficies) |
-| `--aji` | `oklch(0.70 0.19 33)` | Acción principal, selección, turno. Texto oscuro encima |
+| `--hielo` | `oklch(0.82 0.12 222)` | Acción principal, selección, turno. Texto oscuro encima |
 | `--ok` / `--warn` / `--bad` | verde / mostaza / rojo | Listo, avisos, peligro |
 
-Mazos (`[data-deck]`): citas 1 durazno, citas 2 frambuesa, citas 3 vino (texto claro), dilemas mostaza, carrete naranjo, trabajo petróleo, quién es más probable menta, junta de hombres celeste, junta de mujeres magenta, confesiones lavanda, +18 rojo. Niveles +18: `lvl-1` verde, `lvl-2` lima, `lvl-3` ámbar, `lvl-4` naranjo, `lvl-5` rojo intenso (texto claro).
+Mazos (`[data-deck]`): citas 1 celeste claro, citas 2 agua, citas 3 azul profundo (texto claro), dilemas menta, carrete turquesa, trabajo azul acero, quién es más probable lavanda, junta de hombres cobalto, junta de mujeres lila, confesiones violeta, +18 rojo. Niveles +18: `lvl-1` verde, `lvl-2` lima, `lvl-3` ámbar, `lvl-4` naranjo, `lvl-5` rojo intenso (texto claro).
 
 ## Tipografía
 
