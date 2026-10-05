@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261005151214";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005151214";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005151214";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005151214";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005151214";
+import { firebaseConfig } from "./firebase-config.js?v=20261005151559";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005151559";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005151559";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005151559";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005151559";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -534,6 +534,31 @@ async function removeGhostsWithMyName(code) {
   }
 }
 
+// ---------- Salas inactivas ----------
+// Una sala muere tras 24 horas sin nadie conectado. La última actividad es el latido más reciente
+// de sus jugadores (o la creación, si ya no queda nadie). Las reglas no permiten borrar salas,
+// así que se marcan como "expired" y se sacan sus jugadores.
+const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function roomLastActivity(code, room) {
+  const snap = await getDocs(collection(db, "salas", code, "players"));
+  const seen = snap.docs.map((d) => toMillis(d.data({ serverTimestamps: "estimate" }).lastSeen));
+  return { last: Math.max(0, toMillis(room.createdAt), ...seen), playerIds: snap.docs.map((d) => d.id) };
+}
+
+async function checkRoomAlive(code, room) {
+  if (room.state === "expired") return false;
+  const { last, playerIds } = await roomLastActivity(code, room);
+  if (Date.now() - last <= ROOM_TTL_MS) return true;
+  try {
+    await updateDoc(roomRef(code), { state: "expired" });
+    await Promise.all(playerIds.map((id) => deleteDoc(doc(db, "salas", code, "players", id))));
+  } catch (err) {
+    console.warn("No se pudo cerrar la sala inactiva:", err);
+  }
+  return false;
+}
+
 // ---------- Crear, unirse, salir ----------
 $("btn-create-room").addEventListener("click", async () => {
   if (!readPlayerName()) return;
@@ -578,6 +603,10 @@ async function joinRoom(rawCode, { silent = false } = {}) {
     const snap = await getDoc(roomRef(code));
     if (!snap.exists()) {
       if (!silent) showToast(`La sala ${code} no existe o ya se cerró`, "❌");
+      return false;
+    }
+    if (!(await checkRoomAlive(code, snap.data()))) {
+      showToast(`La sala ${code} se cerró por estar más de 24 horas sin actividad`, "⌛");
       return false;
     }
     if (wasBanned(snap.data())) {
@@ -3141,7 +3170,8 @@ async function restoreRoomFromUrlOrSession() {
   const savedRoom = load("local", "rh_room");
 
   if (invited && savedRoom && savedRoom !== invited && profile.name) {
-    const stillThere = (await getDoc(roomRef(savedRoom)).catch(() => null))?.exists();
+    const savedSnap = await getDoc(roomRef(savedRoom)).catch(() => null);
+    const stillThere = !!savedSnap?.exists() && (await checkRoomAlive(savedRoom, savedSnap.data()).catch(() => false));
     if (stillThere) {
       $("lbl-switch-old-room").textContent = savedRoom;
       $("lbl-switch-new-room").textContent = invited;

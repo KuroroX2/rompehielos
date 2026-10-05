@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="style.css?v=20261005151214">
+  <link rel="stylesheet" href="style.css?v=20261005151559">
 </head>
 <body>
 
@@ -250,11 +250,12 @@
 
           <!-- Paso 2: cómo jugarla -->
           <div id="host-step-2" hidden>
-            <div class="row-between">
-              <h3 class="block-title">Paso 2 · ¿Cómo quieren jugar?</h3>
-              <button type="button" class="back-btn" id="btn-host-prev-step">← Cambiar</button>
+            <span class="field-label">Juego elegido</span>
+            <div class="selected-dynamic">
+              <div class="selected-dynamic-info" id="selected-dynamic-summary"></div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-host-prev-step">Cambiar</button>
             </div>
-            <div class="selected-dynamic" id="selected-dynamic-summary"></div>
+            <h3 class="block-title">Paso 2 · ¿Cómo quieren jugar?</h3>
 
             <div id="step2-content"></div>
 
@@ -450,6 +451,6 @@
     <div>RompeHielos · para que la conversación no muera</div>
   </footer>
 
-  <script type="module" src="app.js?v=20261005151214"></script>
+  <script type="module" src="app.js?v=20261005151559"></script>
 </body>
 </html>
