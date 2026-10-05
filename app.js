@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261005151559";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005151559";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005151559";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005151559";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005151559";
+import { firebaseConfig } from "./firebase-config.js?v=20261005201815";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005201815";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005201815";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005201815";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005201815";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -364,7 +364,7 @@ function friendlyError(err) {
 // ---------- Observador de una sala (lo usan los jugadores y el Modo TV) ----------
 function createRoomWatcher(code, onUpdate, onMissing) {
   const w = {
-    code, room: null, players: [], votes: [], subs: [], answers: [], muro: [], guesses: [], gifts: [],
+    code, room: null, players: [], votes: [], subs: [], answers: [], muro: [], gifts: [],
     roundKey: null, gameKey: null, unsubs: [], roundUnsubs: [], gameUnsubs: [],
   };
 
@@ -409,11 +409,9 @@ function createRoomWatcher(code, onUpdate, onMissing) {
       w.roundUnsubs.forEach((u) => u());
       w.roundUnsubs = [];
       w.votes = [];
-      w.guesses = [];
       w.answers = [];
       w.roundKey = roundKey;
       if (playing && ["preguntas", "confesiones", "tres"].includes(r.mode)) listen(`v_${r.gameId}_${r.round}`, "votes", w.roundUnsubs);
-      if (playing && r.mode === "preguntas" && r.settings?.guess) listen(`g_${r.gameId}_${r.round}`, "guesses", w.roundUnsubs);
       if (playing && r.mode === "duo") listen(`d_${r.gameId}_${r.round}`, "answers", w.roundUnsubs);
     }
   };
@@ -903,7 +901,6 @@ const setup = {
   levels: new Set([1, 2]),
   temas: new Set(TEMAS_18.map((t) => t.tema)),
   variant: PERSONA_VARIANTS[0].key,
-  guess: false,
   revealGender: true,
   revealAuthor: true,
 };
@@ -991,9 +988,6 @@ function renderHostStep() {
 
   // Opciones extra, con el mismo estilo de casilla
   const options = [];
-  if (dyn.mode === "preguntas") {
-    options.push(toggleRowHtml({ attr: "opt", value: "guess", on: setup.guess, icon: "🎯", title: "Adivina cuántos", desc: "Antes de ver los resultados, cada uno apuesta cuántos respondieron que sí (o qué opción ganó). Suma puntos para el ranking." }));
-  }
   if (dyn.gender) {
     options.push(toggleRowHtml({ attr: "opt", value: "revealGender", on: setup.revealGender, icon: "🚻", title: "Resultados por género", desc: setup.revealGender ? genderPreviewText(players) : "Solo se verá el total del grupo." }));
   }
@@ -1153,7 +1147,7 @@ function gameResetFields() {
   return {
     phase: null, round: 0, pos: 0, deck: [], order: [], current: null,
     speaker: null, currentAuthor: null, realIdx: null, category: null,
-    variant: null, participants: [], hands: {}, shown: 0, hidden: [], lastGuess: null,
+    variant: null, participants: [], hands: {}, shown: 0, hidden: [],
   };
 }
 
@@ -1197,12 +1191,10 @@ $("btn-start-dynamic").addEventListener("click", async () => {
     settings: {
       revealAuthor: setup.revealAuthor,
       revealGender: setup.revealGender,
-      guess: dyn.mode === "preguntas" && setup.guess,
       types: [...setup.types],
       levels: [...setup.levels],
       temas: [...setup.temas],
     },
-    scores: {},
   };
   if (dynamicPool(dyn) && setupQuestions(dyn).length === 0) {
     showToast("No hay preguntas con esa selección", "☝️");
@@ -1412,82 +1404,6 @@ function experienceResultsHtml(votes, revealGender) {
   return html + `<div class="results-headline subtle">${intrigue}</div>`;
 }
 
-// ---------- Adivina cuántos ----------
-// Se apuesta siempre por lo más jugoso: cuántos dijeron "sí" o "lo he hecho", qué opción ganó o quién fue el más votado.
-function guessSpec(info, players) {
-  const numbers = () => Array.from({ length: players.length + 1 }, (_, n) => ({ value: n, label: String(n), html: String(n) }));
-  const topSet = (counts) => {
-    const max = Math.max(0, ...counts.values());
-    return new Set([...counts.entries()].filter(([, c]) => c === max && max > 0).map(([k]) => k));
-  };
-  if (info.type === "yesno") {
-    return {
-      prompt: `¿Cuántos crees que respondieron "${info.labels[0]}"?`, numeric: true, options: numbers(),
-      answer: (votes) => votes.filter((v) => v.value === "yes").length,
-    };
-  }
-  if (info.type === "experience") {
-    return {
-      prompt: `¿Cuántos crees que respondieron "${EXPERIENCE_OPTIONS[0]}"?`, numeric: true, options: numbers(),
-      answer: (votes) => votes.filter((v) => v.value === 0).length,
-    };
-  }
-  if (info.type === "choice") {
-    return {
-      prompt: "¿Qué opción crees que ganó?",
-      options: info.options.map((opt, i) => ({ value: i, label: opt, html: `<span class="opt-letter">${optionLetter(i)}</span> ${escapeHtml(opt)}` })),
-      answer: (votes) => topSet(new Map(info.options.map((_, i) => [i, votes.filter((v) => v.value === i).length]))),
-      describe: (set) => (set.size ? `Ganó: ${[...set].map((i) => info.options[i]).join(" y ")}` : "Nadie votó"),
-    };
-  }
-  if (info.type === "suspect") {
-    return {
-      prompt: "¿Quién crees que fue el más votado?",
-      options: players.map((p) => ({ value: p.id, label: p.name, html: `<span class="vote-avatar">${p.avatar || "👤"}</span> ${escapeHtml(p.name)}` })),
-      answer: (votes) => topSet(votes.reduce((m, v) => m.set(v.value, (m.get(v.value) || 0) + 1), new Map())),
-      describe: (set) => `Más votado: ${[...set].map((id) => players.find((p) => p.id === id)?.name || "?").join(" y ")}`,
-    };
-  }
-  return null;
-}
-
-function isCorrectGuess(spec, answer, value) {
-  return spec.numeric ? value === answer : answer.has(value);
-}
-
-function guessKey(room) {
-  return `rh_g_${roomWatcher.code}_${room.gameId}_${room.round}`;
-}
-
-async function castGuess(value, label) {
-  const w = roomWatcher;
-  const room = w?.room;
-  if (!room || load("session", guessKey(room))) return;
-  store("session", guessKey(room), JSON.stringify({ value, label }));
-  renderGame(w);
-  try {
-    await setDoc(doc(db, "salas", w.code, `g_${room.gameId}_${room.round}`, profile.playerId), { value, name: profile.name });
-    markStepDone();
-  } catch (err) {
-    unstore("session", guessKey(room));
-    renderGame(w);
-    showToast("No se pudo guardar tu apuesta: " + friendlyError(err), "❌");
-  }
-}
-
-function rankingHtml(scores) {
-  const sorted = Object.values(scores || {}).filter((s) => s.pts > 0).sort((a, b) => b.pts - a.pts).slice(0, 5);
-  if (!sorted.length) return "";
-  return `<div class="ranking">🏆 <strong>Mejor adivino:</strong> ${sorted.map((s, i) => `${i === 0 ? "👑 " : ""}${escapeHtml(s.name)} (${s.pts})`).join(" · ")}</div>`;
-}
-
-function guessOutcomeHtml(room) {
-  const g = room.lastGuess;
-  if (!g || g.round !== room.round) return "";
-  const who = g.winners.length ? `Acertaron: ${g.winners.map(escapeHtml).join(", ")} 🎯` : "Nadie acertó 😅";
-  return `<div class="guess-outcome"><strong>${escapeHtml(g.answer)}</strong><span>${who}</span></div>${rankingHtml(room.scores)}`;
-}
-
 function voteButtonsHtml(buttons) {
   return `<div class="voting-options-grid">${buttons
     .map((b) => `<button type="button" class="vote-btn ${b.cls || ""}" data-vote="${escapeAttr(JSON.stringify(b.value))}" data-label="${escapeAttr(b.label)}">${b.html}</button>`)
@@ -1535,7 +1451,6 @@ function currentStep(room) {
   if (room.mode === "preguntas") {
     const info = classifyGroupQuestion(room.deck[room.pos], room.category);
     if (info.type === "open" || room.phase === "results") return null;
-    if (room.phase === "guess") return { key: `${g}:${room.round}:guess`, verb: "apostó" };
     return { key: `${g}:${room.round}`, verb: "votó" };
   }
   if (room.mode === "persona") {
@@ -1580,7 +1495,7 @@ function ensurePanel(key, html) {
 }
 
 // ---------- Preguntas en grupo (votos / ronda de respuesta) ----------
-// Fases: vote -> (guess, si está activo "Adivina cuántos") -> results. El anfitrión avanza cada fase.
+// Fases: vote -> results. El anfitrión avanza cada fase.
 function renderPreguntas(w) {
   const room = w.room;
   const question = room.deck[room.pos] || "";
@@ -1635,8 +1550,6 @@ function renderPreguntas(w) {
 
   const votes = w.votes;
   const everyoneVoted = allDone(votes.length, players.length);
-  const guessOn = !!room.settings?.guess;
-  const spec = guessOn ? guessSpec(info, players) : null;
 
   if (room.phase === "vote") {
     const myVote = getMyVote(room);
@@ -1661,31 +1574,9 @@ function renderPreguntas(w) {
     }
     $("g-progress").textContent = `🗳️ ${votes.length} de ${players.length} votaron`;
     $("g-results").innerHTML = "";
-    const nextStep = guessOn && spec
-      ? { action: "to-guess", label: "🎯 ¡A adivinar!" }
-      : { action: "show-results", label: "📊 Mostrar resultados" };
     $("game-host-bar").innerHTML = host
-      ? hostButtons([waitingButton(everyoneVoted, votes.length, players.length, nextStep.action, nextStep.label, room), SKIP_BUTTON])
+      ? hostButtons([waitingButton(everyoneVoted, votes.length, players.length, "show-results", "📊 Mostrar resultados", room), SKIP_BUTTON])
       : nonHostNote("Cuando todos voten, el anfitrión sigue.");
-    return;
-  }
-
-  if (room.phase === "guess" && spec) {
-    let myGuess = null;
-    try { myGuess = JSON.parse(load("session", guessKey(room)) || "null"); } catch {}
-    $("g-vote-area").innerHTML = myGuess
-      ? `<div class="voted-status">🎯 Tu apuesta: <strong>${escapeHtml(myGuess.label)}</strong></div>`
-      : `<p class="guess-prompt">🎯 ${escapeHtml(spec.prompt)}</p>
-         <div class="voting-options-grid ${spec.numeric ? "numbers" : ""}">${spec.options
-           .map((o) => `<button type="button" class="vote-btn ${spec.numeric ? "number" : "option compact"}" data-guess="${escapeAttr(JSON.stringify(o.value))}" data-label="${escapeAttr(o.label)}">${o.html}</button>`)
-           .join("")}</div>`;
-    const guesses = w.guesses.length;
-    $("g-progress").textContent = `🎯 ${guesses} de ${players.length} apostaron`;
-    $("g-results").innerHTML = "";
-    const allGuessed = allDone(guesses, players.length);
-    $("game-host-bar").innerHTML = host
-      ? hostButtons([waitingButton(allGuessed, guesses, players.length, "show-results", "📊 Mostrar resultados", room), SKIP_BUTTON])
-      : nonHostNote("Cuando todos apuesten, el anfitrión muestra los resultados.");
     return;
   }
 
@@ -1698,7 +1589,7 @@ function renderPreguntas(w) {
     else if (info.type === "choice") html = choiceResultsHtml(votes, info.options);
     else if (info.type === "experience") html = experienceResultsHtml(votes, revealGender);
     else html = yesNoResultsHtml(votes, info, revealGender);
-    $("g-results").innerHTML = `${guessOn ? guessOutcomeHtml(room) : ""}<div class="results-box">${html}</div>`;
+    $("g-results").innerHTML = `<div class="results-box">${html}</div>`;
   } else {
     $("g-results").innerHTML = `<p class="muted-small center">Nadie votó en esta ronda.</p>`;
   }
@@ -2490,33 +2381,10 @@ const HOST_ACTIONS = {
     });
   },
 
-  "to-guess": () => {
-    const w = roomWatcher;
-    if (!doneOrForced(w.votes.length, activePlayers(w.players).length)) return;
-    return hostUpdate({ phase: "guess" });
-  },
-
   "show-results": () => {
     const w = roomWatcher;
-    const r = w.room;
-    const players = activePlayers(w.players);
-    if (r.phase !== "guess") {
-      if (!doneOrForced(w.votes.length, players.length)) return;
-      return hostUpdate({ phase: "results" });
-    }
-    if (!doneOrForced(w.guesses.length, players.length)) return;
-
-    // Se calcula quién acertó y se suma al ranking de la partida
-    const info = classifyGroupQuestion(r.deck[r.pos], r.category);
-    const spec = guessSpec(info, players);
-    const answer = spec.answer(w.votes);
-    const winners = w.guesses.filter((g) => isCorrectGuess(spec, answer, g.value));
-    const scores = { ...(r.scores || {}) };
-    winners.forEach((g) => {
-      scores[g.id] = { name: g.name, pts: (scores[g.id]?.pts || 0) + 1 };
-    });
-    const answerText = spec.numeric ? `Fueron ${answer} 🔥` : spec.describe(answer);
-    return hostUpdate({ phase: "results", scores, lastGuess: { round: r.round, answer: answerText, winners: winners.map((g) => g.name) } });
+    if (!doneOrForced(w.votes.length, activePlayers(w.players).length)) return;
+    return hostUpdate({ phase: "results" });
   },
 
   "duo-reveal": () => {
@@ -2615,11 +2483,6 @@ $("game-panel").addEventListener("click", (e) => {
   const voteBtn = e.target.closest(".vote-btn[data-vote]");
   if (voteBtn) {
     handleVoteClick(voteBtn);
-    return;
-  }
-  const guessBtn = e.target.closest(".vote-btn[data-guess]");
-  if (guessBtn) {
-    castGuess(JSON.parse(guessBtn.dataset.guess), guessBtn.dataset.label);
     return;
   }
   const duoBtn = e.target.closest(".vote-btn[data-duo]");
@@ -2773,15 +2636,13 @@ function renderTvRoom(w) {
     }
     if (room.phase === "vote") {
       results.innerHTML = `<div class="results-headline">🗳️ ${w.votes.length} de ${players.length} votaron</div>`;
-    } else if (room.phase === "guess") {
-      results.innerHTML = `<div class="results-headline">🎯 A adivinar: ${w.guesses.length} de ${players.length} apostaron</div>`;
     } else if (w.votes.length) {
       const revealGender = !!room.settings?.revealGender;
       const html = info.type === "suspect" ? suspectResultsHtml(w.votes, w.players)
         : info.type === "choice" ? choiceResultsHtml(w.votes, info.options)
         : info.type === "experience" ? experienceResultsHtml(w.votes, revealGender)
         : yesNoResultsHtml(w.votes, info, revealGender);
-      results.innerHTML = `${room.settings?.guess ? guessOutcomeHtml(room) : ""}<div class="results-box">${html}</div>`;
+      results.innerHTML = `<div class="results-box">${html}</div>`;
     }
   } else if (room.mode === "confesiones") {
     if (room.phase === "write") {

@@ -1910,7 +1910,7 @@ select.input-field { cursor: pointer; }
 
 .footer-link-btn:hover { color: var(--hielo); }
 
-/* ========== Experiencia (+18) y Adivina cuántos ========== */
+/* ========== Experiencia (+18) ========== */
 .vote-btn.exp-0 { border-color: var(--ok-line); background: var(--ok-soft); }
 .vote-btn.exp-1 { border-color: var(--warn-line); background: var(--warn-soft); }
 .vote-btn.exp-2 { border-color: var(--bad-line); background: var(--bad-soft); }
@@ -1919,45 +1919,6 @@ select.input-field { cursor: pointer; }
 .result-track.stacked { display: flex; }
 .result-track.stacked > div { height: 100%; }
 
-.guess-prompt {
-  text-align: center;
-  font-weight: 800;
-  font-size: 17px;
-  margin: 12px 0 4px;
-}
-
-.voting-options-grid.numbers {
-  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
-}
-
-.vote-btn.number {
-  font-family: var(--font-display);
-  font-size: 24px;
-  padding: 12px 0;
-}
-
-.guess-outcome {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  text-align: center;
-  background: var(--surface);
-  border: 1.5px solid var(--hielo-line);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  margin-top: 12px;
-}
-
-.guess-outcome strong { font-size: 19px; }
-.guess-outcome span { color: var(--ink-muted); font-weight: 700; font-size: 15px; }
-
-.ranking {
-  text-align: center;
-  font-size: 14px;
-  color: var(--warn);
-  margin: 8px 0 0;
-}
 
 /* ========== Para cada persona ========== */
 .persona-block {
