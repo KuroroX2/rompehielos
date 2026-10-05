@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261005144256";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005144256";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005144256";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005144256";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005144256";
+import { firebaseConfig } from "./firebase-config.js?v=20261005150102";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005150102";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005150102";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005150102";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005150102";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -123,21 +123,6 @@ function unstore(kind, key) {
   try { (kind === "local" ? localStorage : sessionStorage).removeItem(key); } catch {}
 }
 
-function initParticles() {
-  const container = $("particles-container");
-  for (let i = 0; i < 18; i++) {
-    const p = document.createElement("div");
-    p.className = "particle";
-    const size = Math.random() * 8 + 4;
-    p.style.width = `${size}px`;
-    p.style.height = `${size}px`;
-    p.style.left = `${Math.random() * 100}%`;
-    p.style.animationDelay = `${Math.random() * 12}s`;
-    p.style.animationDuration = `${Math.random() * 8 + 10}s`;
-    container.appendChild(p);
-  }
-}
-
 function switchView(viewId) {
   document.querySelectorAll(".view-screen").forEach((el) => el.classList.toggle("active", el.id === viewId));
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -179,20 +164,20 @@ function renderSoloCategories() {
     .map((cat) => {
       const choiceCount = cat.preguntas.filter(isChoiceQuestion).length;
       return `
-        <div class="category-card" data-catid="${cat.id}" role="button" tabindex="0">
+        <div class="category-card" data-catid="${cat.id}" data-deck="${cat.id}" role="button" tabindex="0">
           <div class="category-top">
-            <span class="cat-emoji">${cat.icono || "🧊"}</span>
-            <span class="cat-badge" style="color:${cat.color || "var(--cyan)"}">${escapeHtml(cat.badge || "Pack")}</span>
+            <span class="cat-emoji" aria-hidden="true">${cat.icono || "🧊"}</span>
+            <span class="cat-badge">${escapeHtml(cat.badge || "Pack")}</span>
           </div>
           <h4>${escapeHtml(cat.titulo)}</h4>
           <p>${escapeHtml(cat.descripcion)}</p>
           <div class="cat-counts">
-            <span class="count-chip choice">🅰️/🅱️ ${choiceCount}</span>
-            <span class="count-chip open">💬 ${cat.preguntas.length - choiceCount}</span>
+            <span class="count-chip choice">${choiceCount} A o B</span>
+            <span class="count-chip open">${cat.preguntas.length - choiceCount} abiertas</span>
           </div>
           <div class="cat-meta">
             <span>${cat.preguntas.length} preguntas</span>
-            <strong>Jugar ➔</strong>
+            <strong>Jugar →</strong>
           </div>
         </div>`;
     })
@@ -246,10 +231,11 @@ function updateSoloCard() {
 
   const typeBadge = $("solo-subcat-badge");
   const choice = isChoiceQuestion(question);
-  typeBadge.textContent = choice ? "🅰️/🅱️ Elección" : "💬 Abierta";
+  typeBadge.textContent = choice ? "A o B" : "Abierta";
   typeBadge.classList.toggle("is-choice", choice);
 
   const card = $("solo-question-card");
+  card.dataset.deck = cat.id;
   card.classList.remove("shake");
   void card.offsetWidth;
   card.classList.add("shake");
@@ -257,8 +243,8 @@ function updateSoloCard() {
   $("solo-rotating-arena").classList.toggle("rotate-180", solo.tableMode && !isP1);
   $("top-player-bar").classList.toggle("active-player", !isP1);
   $("bottom-player-bar").classList.toggle("active-player", isP1);
-  $("lbl-top-player-instruction").textContent = isP1 ? "Escucha a Jugador 1" : "🗣️ Te toca preguntar";
-  $("lbl-bottom-player-instruction").textContent = isP1 ? "🗣️ Te toca preguntar" : "Escucha a Jugador 2";
+  $("lbl-top-player-instruction").textContent = isP1 ? "Escucha a Jugador 1" : "Te toca preguntar";
+  $("lbl-bottom-player-instruction").textContent = isP1 ? "Te toca preguntar" : "Escucha a Jugador 2";
 
   const choiceCount = cat.preguntas.filter(isChoiceQuestion).length;
   $("count-subcat-all").textContent = cat.preguntas.length;
@@ -267,7 +253,6 @@ function updateSoloCard() {
   setChipGroup("solo-filter-chips", solo.subcategory);
 
   $("solo-cat-badge").textContent = `${cat.icono || ""} ${cat.titulo}`;
-  $("solo-cat-badge").style.color = cat.color || "var(--cyan)";
   $("solo-counter").textContent = `${solo.index + 1} / ${total}`;
   $("solo-question-text").textContent = questionText(question);
   $("lbl-table-mode-text").textContent = solo.tableMode ? "Giro: sí" : "Giro: no";
@@ -1485,8 +1470,15 @@ function votedHtml() {
   return `<div class="voted-status">✓ Votaste · tu voto es secreto 🤫</div>`;
 }
 
+// Los botones son acciones: el texto basta, sin emoji decorativo al inicio
+const LEADING_EMOJI = /^(?:\p{Extended_Pictographic}|\uFE0F|\u200D)+\s*/u;
+
+function buttonLabel(label) {
+  return String(label).replace(LEADING_EMOJI, "").replace(/\s*➔$/, " →");
+}
+
 function hostButtons(buttons) {
-  return buttons.map((b) => `<button type="button" class="btn ${b.cls || "btn-primary"}" data-host="${b.action}" ${b.disabled ? "disabled" : ""}>${b.label}</button>`).join("");
+  return buttons.map((b) => `<button type="button" class="btn ${b.cls || "btn-primary"}" data-host="${b.action}" ${b.disabled ? "disabled" : ""}>${buttonLabel(b.label)}</button>`).join("");
 }
 
 function nonHostNote(text) {
@@ -1579,7 +1571,7 @@ function renderPreguntas(w) {
   ensurePanel(
     `preguntas|${room.gameId}|${room.round}|${room.pos}|${room.phase}`,
     `
-    <div class="question-hero ${nivel ? `lvl-${nivel.lvl}` : ""}">
+    <div class="question-hero ${nivel ? `lvl-${nivel.lvl}` : ""}" data-deck="${escapeAttr(room.category || "")}">
       ${nivel ? `<span class="level-badge">${nivel.icon} ${nivel.title}</span>` : ""}
       <span class="type-badge">${questionTypeLabel(info)}</span>
       <p class="question-hero-text">${escapeHtml(questionText(question))}</p>
@@ -2666,7 +2658,7 @@ function renderTvQuestion() {
   if (!cat || tv.deck.length === 0) return;
   tv.index = ((tv.index % tv.deck.length) + tv.deck.length) % tv.deck.length;
   $("tv-q-cat-badge").textContent = `${cat.icono} ${cat.titulo} · ${tv.index + 1} de ${tv.deck.length}`;
-  $("tv-q-cat-badge").style.color = cat.color || "var(--cyan)";
+  $("tv-stage-questions").dataset.deck = cat.id;
   $("tv-giant-q-text").textContent = questionText(tv.deck[tv.index]);
 }
 
@@ -3177,7 +3169,6 @@ async function restoreRoomFromUrlOrSession() {
   if (savedRoom && profile.name) await rejoinSavedRoom(savedRoom);
 }
 
-initParticles();
 setupProfilePickers();
 renderDynamicsGrid();
 renderHostStep();
