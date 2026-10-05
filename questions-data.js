@@ -1,5 +1,5 @@
 // questions-data.js - Banco oficial de RompeHielos (8 categorías)
-import { PREGUNTAS_18 } from "./questions-18.js?v=20261001173320";
+import { PREGUNTAS_18 } from "./questions-18.js?v=20261005143906";
 
 export const DEFAULT_CATEGORIES = [
   {
