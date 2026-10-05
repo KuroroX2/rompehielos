@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261005201815";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005201815";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005201815";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005201815";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005201815";
+import { firebaseConfig } from "./firebase-config.js?v=20261005202748";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005202748";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005202748";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005202748";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005202748";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -310,6 +310,7 @@ const ROOM_DYNAMICS = [
   { key: "persona", mode: "persona", icon: "🎁", title: "Para cada persona", desc: "Carteles, profesiones, regalos y agradecimientos para cada uno, en anónimo." },
   { key: "confesiones", mode: "confesiones", icon: "🕵️", title: "Confesiones anónimas", desc: "Cada uno escribe una confesión y el grupo adivina de quién es.", author: true },
   { key: "tres", mode: "tres", icon: "🎭", title: "2 mentiras y 1 verdad", desc: "Cada uno escribe 3 afirmaciones y el resto adivina la real." },
+  { key: "secretos_pareja", mode: "duo", category: "secretos_intimos", icon: "💞", title: "Secretos en pareja (+18)", desc: "Para 2 personas: responden en secreto y se revela a la vez qué eligió cada uno.", pair: true },
   { key: "duo", mode: "duo", icon: "⚡", title: "Respuestas en sincronía", desc: "Todos responden la misma pregunta en secreto y se revelan juntas." },
   { key: "muro", mode: "muro", icon: "🧱", title: "Muro anónimo", desc: "Mensajes sin nombre que aparecen en vivo en todos los celulares." },
 ];
@@ -909,9 +910,15 @@ function isSpicy(dyn) {
   return dyn.category === "secretos_intimos";
 }
 
+// Niveles que se pueden elegir: en pareja no tiene sentido "¿quién de la sala?" (nivel 6)
+function levelsFor(dyn) {
+  return NIVELES_18.filter((n) => !(dyn.pair && n.group));
+}
+
 // Preguntas disponibles para una dinámica (null si la dinámica no usa el banco de preguntas)
 function dynamicPool(dyn) {
   if (dyn.mode === "preguntas") return { questions: getCategory(dyn.category).preguntas, category: dyn.category };
+  if (dyn.mode === "duo" && dyn.category) return { questions: getCategory(dyn.category).preguntas, category: dyn.category };
   if (dyn.mode === "duo") return { questions: [...getCategory("citas_nivel1").preguntas, ...getCategory("dilemas_absurdos").preguntas], category: "" };
   return null;
 }
@@ -919,7 +926,10 @@ function dynamicPool(dyn) {
 function setupQuestions(dyn) {
   const pool = dynamicPool(dyn);
   if (!pool) return [];
-  if (isSpicy(dyn)) return pool.questions.filter((q) => setup.levels.has(q.lvl) && setup.temas.has(q.tema));
+  if (isSpicy(dyn)) {
+    const allowed = new Set(levelsFor(dyn).map((n) => n.lvl));
+    return pool.questions.filter((q) => allowed.has(q.lvl) && setup.levels.has(q.lvl) && setup.temas.has(q.tema));
+  }
   return pool.questions.filter((q) => setup.types.has(classifyGroupQuestion(q, pool.category).type));
 }
 
@@ -965,7 +975,7 @@ function renderHostStep() {
   } else if (pool && isSpicy(dyn)) {
     const byLevel = (lvl) => pool.questions.filter((q) => q.lvl === lvl && setup.temas.has(q.tema)).length;
     const byTema = (tema) => pool.questions.filter((q) => q.tema === tema && setup.levels.has(q.lvl)).length;
-    html += step2Section("Niveles de intensidad (marca los que quieran)", NIVELES_18.map((n) =>
+    html += step2Section("Niveles de intensidad (marca los que quieran)", levelsFor(dyn).map((n) =>
       toggleRowHtml({ attr: "lvl", value: n.lvl, on: setup.levels.has(n.lvl), icon: n.icon, title: n.title, desc: n.desc, count: byLevel(n.lvl) })
     ).join(""));
     html += step2Section("Temas", TEMAS_18.map((t) =>
@@ -1015,13 +1025,20 @@ function updateDynamicOptions() {
   if (isSpicy(dyn) && (setup.levels.has(4) || setup.levels.has(5))) {
     warning = "Los niveles 4 y 5 son muy explícitos: no se recomiendan en contextos de trabajo.";
   }
+  if (isSpicy(dyn) && !dyn.pair && setup.levels.has(6)) {
+    warning = (warning ? warning + " " : "") + "El nivel 6 pregunta por la gente de esta sala: ojo si hay parejas o ex en el grupo.";
+  }
+  if (dyn.pair && players.length !== 2) {
+    warning = `Esta dinámica es para 2 personas y en la sala hay ${players.length}.`;
+  }
   $("single-gender-warning-box").hidden = !warning;
   $("lbl-single-gender-desc").textContent = warning;
 
   // El botón de empezar aparece solo si todos están listos y hay preguntas para jugar
   const ready = roomWatcher?.room ? lobbyReadiness(roomWatcher) : { allReady: false, readyCount: 0, active: [] };
   const questionCount = usesQuestions ? setupQuestions(dyn).length : 1;
-  const canStart = ready.allReady && questionCount > 0;
+  const pairOk = !dyn.pair || ready.active.length === 2;
+  const canStart = ready.allReady && questionCount > 0 && pairOk;
   $("btn-start-dynamic").hidden = !canStart;
   $("btn-start-dynamic").textContent = usesQuestions ? `🚀 Empezar para todos (${questionCount} preguntas)` : "🚀 Empezar para todos";
   $("start-wait-msg").hidden = canStart;
@@ -1030,6 +1047,7 @@ function updateDynamicOptions() {
   $("start-wait-msg").textContent =
     questionCount === 0 ? (isSpicy(dyn) ? "☝️ Marca al menos un nivel y un tema." : "☝️ Marca al menos un tipo de pregunta.")
     : ready.active.length < 2 ? "👥 Se necesitan al menos 2 jugadores para empezar."
+    : !pairOk ? "💞 Secretos en pareja se juega con exactamente 2 personas en la sala."
     : !imReady ? "✋ Tú también tienes que marcar \"listo\" en la sala de espera."
     : `⏳ Esperando que todos estén listos (${ready.readyCount} de ${ready.active.length}).`;
 }
@@ -1207,6 +1225,11 @@ $("btn-start-dynamic").addEventListener("click", async () => {
     fields.phase = "vote";
     fields.speaker = pickSpeaker(w.players);
   } else if (dyn.mode === "duo") {
+    if (dyn.pair && activePlayers(w.players).length !== 2) {
+      showToast("Secretos en pareja es para exactamente 2 personas", "💞");
+      return;
+    }
+    fields.category = dyn.category || "";
     fields.deck = filteredDeck(dyn);
     fields.phase = "answer";
   } else if (dyn.mode === "muro") {
@@ -1927,6 +1950,7 @@ function duoAnswerKey(room) {
 
 // Opciones para responder: solo las preguntas abiertas llevan texto libre
 function duoAnswerOptions(info, players) {
+  if (info.type === "experience") return info.options.map((label, i) => ({ label, cls: `option exp-${i}`, html: label }));
   if (info.type === "yesno") return info.labels.map((label, i) => ({ label, cls: `big ${i === 0 ? "yes" : "no"}`, html: label }));
   if (info.type === "choice") {
     const cls = info.options.length > 2 ? "option compact" : "option";
@@ -1947,7 +1971,9 @@ function duoRevealHtml(answers, info) {
   const groups = new Map();
   answers.forEach((a) => groups.set(a.answer, [...(groups.get(a.answer) || []), a]));
   const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-  const headline = sorted.length === 1 ? "💯 ¡Todos respondieron lo mismo!" : `🔀 ${sorted.length} respuestas distintas`;
+  const headline = answers.length === 2
+    ? (sorted.length === 1 ? "💯 ¡Coinciden!" : "🔀 Respondieron distinto")
+    : sorted.length === 1 ? "💯 ¡Todos respondieron lo mismo!" : `🔀 ${sorted.length} respuestas distintas`;
   return `
     <div class="results-headline">${headline}</div>
     <div class="results-bars-list">
@@ -1966,6 +1992,7 @@ function renderDuo(w) {
   const players = activePlayers(w.players);
   const question = room.deck[room.pos] || "";
   const info = classifyGroupQuestion(question);
+  const nivel = typeof question === "object" && question.lvl ? NIVELES_18.find((n) => n.lvl === question.lvl) : null;
   const answered = !!load("session", duoAnswerKey(room));
   const answers = w.answers;
   const everyoneAnswered = allDone(answers.length, players.length);
@@ -1976,8 +2003,9 @@ function renderDuo(w) {
   ensurePanel(
     `duo|${room.gameId}|${room.round}|${answered}|${revealed}|${info.type === "suspect" ? players.length : ""}`,
     `
-    <div class="question-hero">
-      <span class="type-badge">⚡ Todos responden en secreto</span>
+    <div class="question-hero ${nivel ? `lvl-${nivel.lvl}` : ""}" data-deck="${escapeAttr(room.category || "")}">
+      ${nivel ? `<span class="level-badge">${nivel.icon} ${nivel.title}</span>` : ""}
+      <span class="type-badge">${room.dynamicKey === "secretos_pareja" ? "💞 Responden los dos en secreto" : "⚡ Todos responden en secreto"}</span>
       <p class="question-hero-text">${escapeHtml(questionText(question))}</p>
     </div>
     ${revealed ? `<div id="g-results"></div>`

@@ -3,6 +3,7 @@
 //   choice     -> elegir una opción ("¿Preferirías X o Y?", "[A | B | C]", formato Gusto)
 //   yesno      -> Sí / No ("He hecho...", "¿Alguna vez...?", formato Confesión)
 //   experience -> Lo he hecho / No, pero me gustaría / No y no me interesa (formato Experiencia)
+//   (+18)  fant -> Sí, me prende / Un poco / Para nada; quien -> votar por alguien de la sala
 //   open       -> no se vota: se sortea a alguien para que responda en voz alta
 //
 // Una pregunta puede ser un texto o un objeto { t, fmt, lvl, tema, opts } (las del +18).
@@ -16,11 +17,15 @@ const GROUP_REFERENCE = /(grupo|nosotros|aquí|presentes|esta sala|este equipo|d
 
 export const EXPERIENCE_OPTIONS = ["✅ Lo he hecho", "😏 No, pero me gustaría", "🙅 No y no me interesa"];
 export const CONFESSION_LABELS = ["🙋 Me ha pasado", "🙅 Nunca"];
+// Fetiches y gustos que no son algo que "se hace" sino algo que te gusta o no
+export const DESIRE_OPTIONS = ["🔥 Sí, me prende", "🤏 Un poco", "🙅 Para nada"];
 
 export const FORMAT_LABELS = {
   exp: "🔥 Experiencia",
   conf: "🙊 Confesión",
   gusto: "💭 Gusto",
+  fant: "🔥 Me prende",
+  quien: "👉 ¿Quién de la sala?",
 };
 
 // Último tramo interrogativo: en "Si pasara X, ¿lo harías?" devuelve "lo harías"
@@ -68,6 +73,8 @@ export function classifyGroupQuestion(q, categoryId = "") {
     if (q.fmt === "exp") return { type: "experience", options: EXPERIENCE_OPTIONS };
     if (q.fmt === "conf") return { type: "yesno", labels: CONFESSION_LABELS };
     if (q.fmt === "gusto" && Array.isArray(q.opts) && q.opts.length >= 2) return { type: "choice", options: q.opts };
+    if (q.fmt === "fant") return { type: "choice", options: DESIRE_OPTIONS };
+    if (q.fmt === "quien") return { type: "suspect" };
   }
 
   const text = rawText(q);

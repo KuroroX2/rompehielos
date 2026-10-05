@@ -2,6 +2,8 @@
 //   Formatos: exp   -> ✅ Lo he hecho / 😏 No, pero me gustaría / 🙅 No y no me interesa
 //             conf  -> 🙋 Me ha pasado / 🙅 Nunca (cosas que nadie "quiere" hacer)
 //             gusto -> opciones propias de cada pregunta
+//             fant  -> 🔥 Sí, me prende / 🤏 Un poco / 🙅 Para nada (fetiches: te prenden o no)
+//             quien -> se vota por alguien de la sala (nivel 6, "Entre nosotros")
 //   El nivel sube según qué tan explícito es el acto, no según el lugar.
 
 export const NIVELES_18 = [
@@ -10,6 +12,7 @@ export const NIVELES_18 = [
   { lvl: 3, icon: "3🌶️", title: "Picante", desc: "Situaciones de riesgo y juegos en pareja." },
   { lvl: 4, icon: "4🌶️", title: "Muy picante", desc: "Más de dos personas y prácticas intensas.", warn: true },
   { lvl: 5, icon: "5🌶️", title: "Sin filtro", desc: "Prácticas específicas, dichas sin rodeos.", warn: true },
+  { lvl: 6, icon: "6🌶️", title: "Entre nosotros", desc: "Se vota en secreto por alguien de la sala: ¿quién de aquí...?", warn: true, group: true },
 ];
 
 export const TEMAS_18 = [
@@ -24,6 +27,14 @@ export const TEMAS_18 = [
 
 const RAW = {
   coqueteo: [
+    [6, "quien", "¿Quién de la sala besa mejor (o eso parece)?"],
+    [6, "quien", "¿Quién de aquí ha besado a más personas?"],
+    [6, "quien", "¿Quién de la sala es más fácil de conquistar?"],
+    [6, "quien", "¿Quién de aquí coquetea sin darse cuenta?"],
+    [6, "quien", "¿Quién de la sala tiene más crushes al mismo tiempo?"],
+    [6, "quien", "¿Quién de aquí es más probable que termine besando a alguien esta noche?"],
+    [6, "quien", "¿Quién de la sala siempre da el primer paso?"],
+    [6, "quien", "¿Quién de aquí se enamora más rápido?"],
     [1, "exp", "Besar a alguien que acababa de conocer esa misma noche"],
     [1, "exp", "Dar yo el primer beso, sin esperar a que la otra persona se lanzara"],
     [1, "exp", "Besar a alguien bajo la lluvia"],
@@ -87,6 +98,13 @@ const RAW = {
   ],
 
   apps: [
+    [6, "quien", "¿Quién de la sala tiene más matches en apps de citas?"],
+    [6, "quien", "¿Quién de aquí ha mandado más nudes?"],
+    [6, "quien", "¿Quién de la sala stalkea más a sus ex?"],
+    [6, "quien", "¿Quién de aquí tiene el chat más comprometedor en el celular?"],
+    [6, "quien", "¿Quién de la sala contesta un \"¿estás despierto/a?\" a las 3 de la mañana?"],
+    [6, "quien", "¿Quién de aquí volvería con su ex esta misma semana?"],
+    [6, "quien", "¿Quién de la sala ha tenido más citas por apps?"],
     [1, "exp", "Crear un perfil falso para espiar a alguien"],
     [1, "exp", "Usar Tinder, Bumble u otra app de citas"],
     [1, "exp", "Tener una cita con alguien que conocí por una app"],
@@ -153,6 +171,16 @@ const RAW = {
   ],
 
   experiencias: [
+    [6, "quien", "¿Quién de la sala ha tenido más parejas sexuales?"],
+    [6, "quien", "¿Quién de aquí tuvo su primera vez más temprano?"],
+    [6, "quien", "¿Quién de la sala ha tenido sexo en el lugar más raro?"],
+    [6, "quien", "¿Quién de aquí tiene más experiencia en la cama?"],
+    [6, "quien", "¿Quién de la sala es más fogoso/a?"],
+    [6, "quien", "¿Quién de aquí se animaría primero a un trío?"],
+    [6, "quien", "¿Quién de la sala ha tenido sexo en un auto?"],
+    [6, "quien", "¿Quién de aquí ha tenido más \"amigos con ventaja\"?"],
+    [6, "quien", "¿Quién de la sala aguanta más rato?"],
+    [6, "quien", "¿Quién de aquí ha tenido sexo en la playa?"],
     [1, "exp", "Tener un romance de verano o de vacaciones"],
     [1, "exp", "Hacer un viaje romántico improvisado con alguien que recién conocía"],
     [1, "exp", "Salir con alguien 10 años mayor que yo"],
@@ -274,6 +302,12 @@ const RAW = {
   ],
 
   juguetes: [
+    [6, "quien", "¿Quién de la sala tiene más juguetes sexuales?"],
+    [6, "quien", "¿Quién de aquí tiene el cajón del velador más interesante?"],
+    [6, "quien", "¿Quién de la sala entra a un sex shop sin nada de vergüenza?"],
+    [6, "quien", "¿Quién de aquí tiene esposas o algo para amarrar guardado?"],
+    [6, "quien", "¿Quién de la sala usaría un juguete en público?"],
+    [6, "quien", "¿Quién de aquí tiene lencería o ropa \"especial\" guardada?"],
     [1, "exp", "Comprar ropa interior especial pensando en una cita"],
     [1, "exp", "Entrar a un sex shop solo a mirar"],
     [1, "exp", "Regalar algo de sex shop como broma en un cumpleaños o despedida"],
@@ -351,16 +385,24 @@ const RAW = {
   ],
 
   fantasias: [
-    [1, "exp", "Tener un crush con un personaje de ficción"],
-    [1, "exp", "Tener un crush con una celebridad muy extraña"],
-    [1, "exp", "Soñar románticamente con alguien que conozco de verdad"],
+    [6, "quien", "¿Quién de la sala tiene las fantasías más raras?"],
+    [6, "quien", "¿Quién de aquí es más dominante en la cama?"],
+    [6, "quien", "¿Quién de la sala es más sumiso/a en la cama?"],
+    [6, "quien", "¿Quién de aquí tiene un fetiche que no ha contado?"],
+    [6, "quien", "¿Quién de la sala ve más porno?"],
+    [6, "quien", "¿Quién de aquí se animaría a un juego de rol con disfraz?"],
+    [6, "quien", "¿Quién de la sala es más ruidoso/a en la cama?"],
+    [6, "quien", "¿Quién de aquí haría un striptease si se lo pidieran?"],
+    [1, "conf", "Tener un crush con un personaje de ficción"],
+    [1, "conf", "Tener un crush con una celebridad muy extraña"],
+    [1, "conf", "Soñar románticamente con alguien que conozco de verdad"],
     [1, "gusto", "¿Qué te parece más romántico?", ["Una cena con velas", "Un viaje sorpresa", "Una carta escrita a mano", "Cocinar juntos"]],
     [1, "gusto", "¿Qué tipo de persona te atrae más?", ["Misteriosa", "Divertida", "Inteligente", "Deportista", "Artista"]],
-    [2, "exp", "Tener un sueño erótico con alguien de mi trabajo o universidad"],
-    [2, "exp", "Tener un sueño erótico con alguien de este grupo"],
-    [2, "exp", "Tener una fantasía con un profesor, profesora o jefe"],
-    [2, "exp", "Tener una fantasía con un desconocido de la calle o el transporte público"],
-    [2, "exp", "Tener una fantasía con la pareja de un amigo o amiga"],
+    [2, "conf", "Tener un sueño erótico con alguien de mi trabajo o universidad"],
+    [2, "conf", "Tener un sueño erótico con alguien de este grupo"],
+    [2, "conf", "Tener una fantasía con un profesor, profesora o jefe"],
+    [2, "conf", "Tener una fantasía con un desconocido de la calle o el transporte público"],
+    [2, "conf", "Tener una fantasía con la pareja de un amigo o amiga"],
     [2, "exp", "Ver pornografía con mi pareja"],
     [2, "exp", "Leer o escuchar relatos eróticos"],
     [2, "exp", "Contarle a mi pareja una fantasía que nunca le había dicho a nadie"],
@@ -379,7 +421,7 @@ const RAW = {
     [3, "exp", "Dominar a mi pareja en la cama"],
     [3, "exp", "Tener sexo frente a un espejo"],
     [3, "exp", "Grabar audios eróticos para mi pareja"],
-    [3, "exp", "Tener una fantasía recurrente con dos personas al mismo tiempo"],
+    [3, "conf", "Tener una fantasía recurrente con dos personas al mismo tiempo"],
     [3, "exp", "Cumplir una fantasía que tenía hace años"],
     [3, "exp", "Probar el sexo tántrico"],
     [3, "exp", "Tener sexo en silencio total porque había gente cerca"],
@@ -389,8 +431,8 @@ const RAW = {
     [4, "exp", "Que me den nalgadas durante el sexo"],
     [4, "exp", "Dar nalgadas durante el sexo"],
     [4, "exp", "Que me tiren el pelo durante el sexo"],
-    [4, "exp", "Tener un fetiche con los pies"],
-    [4, "exp", "Tener un fetiche con la ropa interior o los uniformes"],
+    [4, "fant", "Tener un fetiche con los pies"],
+    [4, "fant", "Tener un fetiche con la ropa interior o los uniformes"],
     [4, "exp", "Practicar exhibicionismo con mi pareja (que otros nos miren)"],
     [4, "exp", "Masturbarme frente a mi pareja"],
     [4, "exp", "Masturbarnos juntos mirándonos"],
@@ -413,8 +455,8 @@ const RAW = {
     [5, "gusto", "¿Qué prefieres?", ["Sexo oral", "Penetración", "Un juego previo largo"]],
     [5, "gusto", "Cuando él termina, ¿dónde prefieres?", ["Adentro, con condón", "Adentro, sin condón", "En la boca", "En el cuerpo", "En la cara"]],
     [1, "gusto", "¿Qué te enamora más?", ["Una mirada", "Una sonrisa", "Una voz", "Un olor", "Unas manos"]],
-    [2, "exp", "Tener una fantasía con alguien del gimnasio"],
-    [2, "exp", "Tener una fantasía con un vecino o una vecina"],
+    [2, "conf", "Tener una fantasía con alguien del gimnasio"],
+    [2, "conf", "Tener una fantasía con un vecino o una vecina"],
     [2, "exp", "Contarle a mi pareja con quién he tenido sueños eróticos"],
     [2, "gusto", "¿Qué te prende más de otra persona?", ["Su seguridad", "Su voz", "Su olor", "Cómo me mira", "Su humor"]],
     [3, "exp", "Tener sexo con una playlist elegida especialmente para el momento"],
@@ -424,10 +466,10 @@ const RAW = {
     [3, "exp", "Mandarle a mi pareja una lista de fantasías para cumplir"],
     [3, "exp", "Que me venden los ojos y tener que adivinar qué me están haciendo"],
     [3, "gusto", "¿Cuánto debería durar el juego previo?", ["5 minutos", "15 minutos", "Media hora", "Lo que haga falta"]],
-    [4, "exp", "Tener la fantasía de que me miren desconocidos"],
+    [4, "fant", "Tener la fantasía de que me miren desconocidos"],
     [4, "exp", "Hacer juegos de dominación con palabra de seguridad"],
     [4, "exp", "Tener sexo mientras mi pareja me da órdenes"],
-    [4, "exp", "Tener un fetiche con el cuero o el látex"],
+    [4, "fant", "Tener un fetiche con el cuero o el látex"],
     [4, "exp", "Que me amarren a la cama"],
     [4, "exp", "Hacer un juego de rol de desconocidos que se conocen en un bar"],
     [4, "exp", "Tener sexo sabiendo que otros nos estaban escuchando"],
@@ -442,6 +484,14 @@ const RAW = {
   ],
 
   secretos: [
+    [6, "quien", "¿Quién de la sala guarda el secreto sexual más grande?"],
+    [6, "quien", "¿Quién de aquí ha sido infiel alguna vez?"],
+    [6, "quien", "¿Quién de la sala ha tenido algo con alguien de este grupo?"],
+    [6, "quien", "¿Quién de aquí miente sobre su número de parejas?"],
+    [6, "quien", "¿Quién de la sala ha fingido más orgasmos?"],
+    [6, "quien", "¿Quién de aquí ha estado con alguien que tenía pareja?"],
+    [6, "quien", "¿Quién de la sala tiene una relación secreta ahora mismo?"],
+    [6, "quien", "¿Quién de aquí ha tenido un sueño erótico con alguien de este grupo?"],
     [1, "conf", "Revisar el celular de mi pareja a escondidas"],
     [1, "conf", "Mentirle a mi pareja sobre dónde estaba"],
     [1, "conf", "Sentir celos de un amigo o amiga de mi pareja"],
@@ -501,6 +551,13 @@ const RAW = {
   ],
 
   verguenza: [
+    [6, "quien", "¿Quién de la sala ha sido pillado/a en pleno acto?"],
+    [6, "quien", "¿Quién de aquí ha tenido la experiencia más vergonzosa en la cama?"],
+    [6, "quien", "¿Quién de la sala le ha mandado un mensaje picante a la persona equivocada?"],
+    [6, "quien", "¿Quién de aquí se ha quedado dormido/a en pleno momento?"],
+    [6, "quien", "¿Quién de la sala ha dicho el nombre equivocado en la cama?"],
+    [6, "quien", "¿Quién de aquí ha tenido que escapar a escondidas de la casa de alguien?"],
+    [6, "quien", "¿Quién de la sala ha despertado sin saber dónde estaba?"],
     [1, "conf", "Que me pillen stalkeando a alguien"],
     [1, "conf", "Tropezar o caerme en plena cita"],
     [1, "conf", "Llamar a mi pareja con el nombre de mi ex"],

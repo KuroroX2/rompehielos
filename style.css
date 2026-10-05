@@ -87,6 +87,7 @@
 .lvl-3 { --card: oklch(0.82 0.15 78);  --card-ink: oklch(0.23 0.05 70);  --lvl: var(--card); }
 .lvl-4 { --card: oklch(0.68 0.18 45);  --card-ink: oklch(0.18 0.04 40);  --lvl: var(--card); }
 .lvl-5 { --card: oklch(0.50 0.21 27);  --card-ink: oklch(0.98 0.01 30);  --lvl: var(--card); }
+.lvl-6 { --card: oklch(0.42 0.16 335); --card-ink: oklch(0.98 0.01 330); --lvl: var(--card); }
 
 /* ========== Base ========== */
 * {
