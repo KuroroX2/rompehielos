@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261021213129";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261021213129";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261021213129";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261021213129";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261021213129";
+import { firebaseConfig } from "./firebase-config.js?v=20261021213715";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261021213715";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261021213715";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261021213715";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261021213715";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -533,25 +533,68 @@ async function removeGhostsWithMyName(code) {
   }
 }
 
+// ---------- Limpieza: no guardar nada más de lo necesario ----------
+// Votos y respuestas se borran apenas se pasa a la siguiente pregunta; confesiones, afirmaciones,
+// regalos y el muro, al terminar o reiniciar la dinámica. Al cerrarse la sala se borra todo.
+async function deleteCollection(code, name) {
+  const snap = await getDocs(collection(db, "salas", code, name));
+  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}
+
+function roundCollections(gameId, round) {
+  return [`v_${gameId}_${round}`, `d_${gameId}_${round}`];
+}
+
+async function deleteGameData(code, { gameId, round = 0, mode }) {
+  if (!gameId) return;
+  const names = [`s_${gameId}`, `a_${gameId}`];
+  for (let r = 0; r <= round; r++) names.push(...roundCollections(gameId, r));
+  if (mode === "muro") names.push("muro");
+  await Promise.all(names.map((n) => deleteCollection(code, n).catch((err) => console.warn("Limpieza:", n, err))));
+}
+
+// La sala queda como un cascarón vacío: las reglas no permiten borrar el documento, pero sí vaciarlo
+async function closeRoom(code, room) {
+  await deleteGameData(code, { gameId: room.gameId, round: room.round || 0, mode: room.mode });
+  await deleteCollection(code, "muro").catch(() => {});
+  await deleteCollection(code, "players");
+  await setDoc(roomRef(code), { code, state: "expired", closedAt: serverTimestamp() });
+}
+
+// El anfitrión limpia lo que ya no se necesita cuando la partida avanza o termina
+function cleanupAfterTransition(w) {
+  const r = w.room;
+  const prev = w.lastGame;
+  const playing = r.state === "playing";
+  w.lastGame = playing ? { gameId: r.gameId, round: r.round || 0, mode: r.mode } : null;
+  if (!prev || !isHost()) return;
+  if (!playing || r.gameId !== prev.gameId) {
+    deleteGameData(w.code, prev);
+  } else if ((r.round || 0) > prev.round) {
+    for (let round = prev.round; round < r.round; round++) {
+      roundCollections(prev.gameId, round).forEach((n) => deleteCollection(w.code, n).catch(() => {}));
+    }
+  }
+}
+
 // ---------- Salas inactivas ----------
 // Una sala muere tras 24 horas sin nadie conectado. La última actividad es el latido más reciente
 // de sus jugadores (o la creación, si ya no queda nadie). Las reglas no permiten borrar salas,
-// así que se marcan como "expired" y se sacan sus jugadores.
+// así que se vacían (jugadores, votos, textos) y quedan marcadas como "expired".
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 
 async function roomLastActivity(code, room) {
   const snap = await getDocs(collection(db, "salas", code, "players"));
   const seen = snap.docs.map((d) => toMillis(d.data({ serverTimestamps: "estimate" }).lastSeen));
-  return { last: Math.max(0, toMillis(room.createdAt), ...seen), playerIds: snap.docs.map((d) => d.id) };
+  return { last: Math.max(0, toMillis(room.createdAt), ...seen) };
 }
 
 async function checkRoomAlive(code, room) {
   if (room.state === "expired") return false;
-  const { last, playerIds } = await roomLastActivity(code, room);
+  const { last } = await roomLastActivity(code, room);
   if (Date.now() - last <= ROOM_TTL_MS) return true;
   try {
-    await updateDoc(roomRef(code), { state: "expired" });
-    await Promise.all(playerIds.map((id) => deleteDoc(doc(db, "salas", code, "players", id))));
+    await closeRoom(code, room);
   } catch (err) {
     console.warn("No se pudo cerrar la sala inactiva:", err);
   }
@@ -782,6 +825,13 @@ async function leaveRoomByCode(code, others = null) {
         return { id: d.id, lastSeen: toMillis(data.lastSeen), joinedAt: toMillis(data.joinedAt) };
       }).sort((a, b) => a.joinedAt - b.joinedAt);
       others = activePlayers(players).filter((p) => p.id !== profile.playerId);
+    }
+    // Si no queda nadie más en la sala (ni siquiera con el celular bloqueado), se cierra y se borra todo
+    const remaining = await getDocs(collection(db, "salas", code, "players"));
+    if (remaining.docs.every((d) => d.id === profile.playerId)) {
+      await closeRoom(code, room);
+      if (load("local", "rh_room") === code) unstore("local", "rh_room");
+      return;
     }
     const next = others[0]?.id;
     const fields = {};
@@ -1142,6 +1192,7 @@ function onRoomUpdate(w) {
     return;
   }
   maybeClaimHost();
+  cleanupAfterTransition(w);
   renderLobby(w);
   const view = activeViewId();
   if (w.room.state === "playing") {
@@ -2494,7 +2545,7 @@ const HOST_ACTIONS = {
 
   "persona-restart": () => hostUpdate({ ...gameResetFields(), ...personaStartFields(roomWatcher, roomWatcher.room.variant), gameId: randomId(6) }),
 
-  "end-game": () => hostUpdate({ state: "lobby" }),
+  "end-game": () => hostUpdate({ state: "lobby", ...gameResetFields() }),
 };
 
 $("game-host-bar").addEventListener("click", (e) => {
