@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022085828";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022085828";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022085828";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022085828";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022085828";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022085828";
+import { firebaseConfig } from "./firebase-config.js?v=20261022105502";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022105502";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022105502";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022105502";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022105502";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022105502";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -260,7 +260,7 @@ function updateSoloCard() {
 
   const typeBadge = $("solo-subcat-badge");
   const choice = isChoiceQuestion(question);
-  typeBadge.textContent = choice ? "A o B" : "Abierta";
+  typeBadge.textContent = choice ? "A o B" : "Conversen";
   typeBadge.classList.toggle("is-choice", choice);
 
   const card = $("solo-question-card");
@@ -1143,12 +1143,24 @@ const QUESTION_TYPES = [
   { type: "choice", icon: "🅰️", title: "Elegir una opción", desc: "¿Preferirías A o B? y preguntas con alternativas" },
   { type: "yesno", icon: "🙋", title: "Sí o No", desc: "Cada uno vota en secreto" },
   { type: "suspect", icon: "👉", title: "Votar por alguien", desc: "¿Quién del grupo...?" },
-  { type: "open", icon: "🎤", title: "Responder en voz alta", desc: "Se sortea a alguien para que responda", duoTitle: "Respuesta escrita", duoDesc: "Cada uno escribe lo que quiera" },
+  { type: "open", icon: "🎤", title: "Responder en voz alta", desc: "Una ruleta elige quién responde y el resto vota su respuesta", duoTitle: "Respuesta escrita", duoDesc: "Cada uno escribe lo que quiera" },
 ];
+
+// Lo que más engancha es votar en secreto: las preguntas de responder en voz alta quedan
+// apagadas por defecto (en "Respuestas en sincronía" son respuestas escritas y se mantienen).
+// Si un juego se quedara sin preguntas votables, se activan solas.
+function defaultQuestionTypes(dyn) {
+  const all = QUESTION_TYPES.map((t) => t.type);
+  if (dyn?.mode === "duo") return new Set(all);
+  const voting = new Set(all.filter((t) => t !== "open"));
+  const pool = dyn ? dynamicPool(dyn) : null;
+  if (pool && !pool.questions.some((q) => voting.has(classifyGroupQuestion(q, pool.category).type))) return new Set(all);
+  return voting;
+}
 
 let hostStep = 1;
 const setup = {
-  types: new Set(QUESTION_TYPES.map((t) => t.type)),
+  types: defaultQuestionTypes(),
   levels: new Set([1, 2]),
   temas: new Set(TEMAS_18.map((t) => t.tema)),
   variant: PERSONA_VARIANTS[0].key,
@@ -1325,7 +1337,7 @@ $("dynamics-grid").addEventListener("click", (e) => {
   const card = e.target.closest(".dynamic-card-radio");
   if (!card) return;
   selectedDynamicKey = card.dataset.key;
-  setup.types = new Set(QUESTION_TYPES.map((t) => t.type));
+  setup.types = defaultQuestionTypes(getDynamic(selectedDynamicKey));
   hostStep = 2;
   renderDynamicsGrid();
   renderHostStep();
@@ -1463,7 +1475,7 @@ $("btn-setup-back").addEventListener("click", () => switchView("view-lobby"));
 // ---------- Iniciar dinámica (anfitrión) ----------
 function gameResetFields() {
   return {
-    phase: null, round: 0, pos: 0, deck: [], order: [], current: null, highlights: [],
+    phase: null, round: 0, pos: 0, deck: [], order: [], current: null, highlights: [], revealed: 0,
     speaker: null, currentAuthor: null, realIdx: null, category: null,
     variant: null, participants: [], hands: {}, shown: 0, hidden: [],
   };
@@ -1748,9 +1760,10 @@ function resultHighlight(room, votes, players) {
   const info = classifyGroupQuestion(q, room.category);
   const t = questionText(q);
   const of = votes.length;
-  if (info.type === "yesno") return { k: "yes", t, n: votes.filter((v) => v.value === "yes").length, of };
+  const c = room.category || "";
+  if (info.type === "yesno") return { k: "yes", c, t, n: votes.filter((v) => v.value === "yes").length, of };
   if (info.type === "experience") {
-    return { k: "exp", t, n: votes.filter((v) => v.value === 0).length, want: votes.filter((v) => v.value === 1).length, of };
+    return { k: "exp", c, t, n: votes.filter((v) => v.value === 0).length, want: votes.filter((v) => v.value === 1).length, of };
   }
   if (info.type === "suspect") {
     const tally = new Map();
@@ -1761,34 +1774,68 @@ function resultHighlight(room, votes, players) {
     return p ? { k: "who", t, name: `${p.avatar || "👤"} ${p.name}` } : null;
   }
   if (info.type === "open" && room.speaker) {
+    const name = `${room.speaker.avatar} ${room.speaker.name}`;
     const fire = votes.filter((v) => v.value === 0).length;
-    return fire * 2 > of ? { k: "best", t, name: `${room.speaker.avatar} ${room.speaker.name}`, n: fire, of } : null;
+    const laughs = votes.filter((v) => v.value === 1).length;
+    if (fire * 2 > of) return { k: "best", t, name, n: fire, of };
+    if (laughs * 2 > of) return { k: "fun", t, name, n: laughs, of };
+    return null;
   }
   return null;
 }
 
-function summaryHtml(highlights, rounds) {
+// Lo mejor de la partida, con nombres que calzan con el juego (no todo es una "confesión")
+function summaryHtml(highlights, revealed) {
   const items = [];
-  const confessed = highlights.filter((h) => (h.k === "yes" || h.k === "exp") && h.n > 0).sort((a, b) => b.n / b.of - a.n / a.of)[0];
-  if (confessed) items.push({ icon: "🙊", title: "Lo más confesado", body: `${Math.round((confessed.n / confessed.of) * 100)}% dijo que sí`, quote: confessed.t });
-  const wanted = highlights.filter((h) => h.k === "exp" && h.want > 0).sort((a, b) => b.want / b.of - a.want / a.of)[0];
+  const pct = (h) => Math.round((h.n / h.of) * 100);
+  const binary = highlights.filter((h) => h.k === "yes" || h.k === "exp");
+  const spicy = (h) => h.c === "secretos_intimos";
+
+  const topYes = binary.filter((h) => h.n > 0 && h.n < h.of).sort((x, y) => y.n / y.of - x.n / x.of)[0];
+  if (topYes) items.push({ icon: spicy(topYes) ? "🙊" : "🙋", title: spicy(topYes) ? "Lo más confesado" : "El sí más fuerte", body: `${pct(topYes)}% dijo que sí`, quote: topYes.t });
+
+  const split = binary.filter((h) => h.of >= 2 && h !== topYes).sort((x, y) => Math.abs(x.n / x.of - 0.5) - Math.abs(y.n / y.of - 0.5))[0];
+  if (split && Math.abs(split.n / split.of - 0.5) <= 0.2) items.push({ icon: "⚖️", title: "La que más dividió al grupo", body: `${split.n} sí · ${split.of - split.n} no`, quote: split.t });
+
+  const unanimous = binary.find((h) => h.of >= 2 && (h.n === h.of || h.n === 0));
+  if (unanimous) items.push({ icon: "🤝", title: "En lo que todos coincidieron", body: unanimous.n === unanimous.of ? "Todos dijeron que sí" : "Nadie dijo que sí", quote: unanimous.t });
+
+  const wanted = highlights.filter((h) => h.k === "exp" && h.want > 0).sort((x, y) => y.want / y.of - x.want / x.of)[0];
   if (wanted) items.push({ icon: "😏", title: "Lo que más ganas da", body: `${wanted.want} de ${wanted.of} ${wanted.want === 1 ? "tiene" : "tienen"} ganas`, quote: wanted.t });
+
   const counts = new Map();
   highlights.filter((h) => h.k === "who").forEach((h) => counts.set(h.name, (counts.get(h.name) || 0) + 1));
-  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const top = [...counts.entries()].sort((x, y) => y[1] - x[1])[0];
   if (top) items.push({ icon: "👑", title: "La persona más votada", body: `${escapeHtml(top[0])} · ganó ${top[1]} ${top[1] === 1 ? "votación" : "votaciones"}` });
-  const best = highlights.filter((h) => h.k === "best").sort((a, b) => b.n / b.of - a.n / a.of)[0];
+
+  const best = highlights.filter((h) => h.k === "best").sort((x, y) => y.n / y.of - x.n / x.of)[0];
   if (best) items.push({ icon: "🔥", title: "La mejor respuesta", body: escapeHtml(best.name), quote: best.t });
+  const funny = highlights.filter((h) => h.k === "fun").sort((x, y) => y.n / y.of - x.n / x.of)[0];
+  if (funny) items.push({ icon: "😂", title: "La respuesta más divertida", body: escapeHtml(funny.name), quote: funny.t });
+
   return `
     <div class="summary">
       <div class="reveal-headline">¡Qué partida! 🎉</div>
-      <p class="reveal-sub">${rounds} ${rounds === 1 ? "pregunta jugada" : "preguntas jugadas"}</p>
-      ${items.length ? `<div class="summary-list">${items.map((it) => `
+      <p class="reveal-sub">${revealed} ${revealed === 1 ? "pregunta revelada" : "preguntas reveladas"}</p>
+      ${items.length ? `<div class="summary-list">${items.slice(0, 5).map((it) => `
         <div class="summary-item">
           <span class="summary-icon" aria-hidden="true">${it.icon}</span>
           <div><strong>${it.title}</strong><span>${it.body}</span>${it.quote ? `<q>${escapeHtml(it.quote)}</q>` : ""}</div>
         </div>`).join("")}</div>` : ""}
     </div>`;
+}
+
+// Después de cada resultado el anfitrión puede seguir o cerrar con el resumen; cada 10 preguntas
+// el resumen pasa a ser la opción destacada, para que la partida tenga un final.
+const ROUND_SIZE = 10;
+
+function resultsHostButtons(room) {
+  const revealed = room.revealed || 0;
+  if (revealed < 2) return [{ action: "next-question", label: "Siguiente pregunta" }];
+  const milestone = revealed % ROUND_SIZE === 0;
+  return milestone
+    ? [{ action: "show-summary", label: `Ver resumen (${revealed} preguntas)`, cls: "btn-purple" }, { action: "next-question", label: "Seguir jugando", cls: "btn-secondary" }]
+    : [{ action: "next-question", label: "Siguiente pregunta" }, { action: "show-summary", label: "Terminar y ver resumen", cls: "btn-secondary" }];
 }
 
 function voteButtonsHtml(buttons) {
@@ -1898,7 +1945,7 @@ function renderPreguntas(w) {
 
   if (room.phase === "summary") {
     $("game-status").textContent = "Resumen de la partida";
-    ensurePanel(`summary|${room.gameId}|${(room.highlights || []).length}`, summaryHtml(room.highlights || [], room.round + 1));
+    ensurePanel(`summary|${room.gameId}|${(room.highlights || []).length}`, summaryHtml(room.highlights || [], room.revealed || 0));
     $("game-host-bar").innerHTML = isHost()
       ? hostButtons([
           { action: "next-question", label: "Seguir jugando", cls: "btn-secondary" },
@@ -1979,7 +2026,7 @@ function renderPreguntas(w) {
     $("g-results").innerHTML = `<p class="muted-small center">Nadie votó en esta ronda.</p>`;
   }
   $("game-host-bar").innerHTML = host
-    ? hostButtons([{ action: "next-question", label: "Siguiente pregunta ➔" }])
+    ? hostButtons(resultsHostButtons(room))
     : nonHostNote("Esperando la siguiente pregunta...");
 }
 
@@ -2104,7 +2151,7 @@ function renderOpenQuestion(w, players, host) {
     ? `<div class="results-box">${ratingResultsHtml(votes, sp.name)}</div>`
     : `<p class="muted-small center">Nadie votó esta respuesta.</p>`;
   $("game-host-bar").innerHTML = host
-    ? hostButtons([{ action: "next-question", label: "Siguiente pregunta" }])
+    ? hostButtons(resultsHostButtons(room))
     : nonHostNote("Esperando la siguiente pregunta...");
 }
 
@@ -2907,13 +2954,14 @@ const HOST_ACTIONS = {
     const open = r.mode === "preguntas" && classifyGroupQuestion(r.deck[r.pos], r.category).type === "open";
     const expected = open ? openVoters(r, players).length : players.length;
     if (!doneOrForced(w.votes.length, expected)) return;
-    const fields = { phase: "results" };
+    const fields = { phase: "results", revealed: (r.revealed || 0) + 1 };
     const highlight = r.mode === "preguntas" ? resultHighlight(r, w.votes, players) : null;
     if (highlight) fields.highlights = [...(r.highlights || []), highlight].slice(-40);
     return hostUpdate(fields);
   },
 
   "open-rate": () => hostUpdate({ phase: "rate" }),
+  "show-summary": () => hostUpdate({ phase: "summary" }),
 
   "duo-reveal": () => {
     const w = roomWatcher;
@@ -3101,7 +3149,7 @@ function renderTvRoom(w) {
 
   if (room.mode === "preguntas" && room.phase === "summary") {
     headline.textContent = "Resumen de la partida";
-    results.innerHTML = summaryHtml(room.highlights || [], room.round + 1);
+    results.innerHTML = summaryHtml(room.highlights || [], room.revealed || 0);
   } else if (room.mode === "preguntas") {
     const question = room.deck[room.pos] || "";
     const info = classifyGroupQuestion(question, room.category);
