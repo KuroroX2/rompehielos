@@ -2200,3 +2200,41 @@ a.footer-link-btn { display: inline-flex; align-items: center; }
 .legal-page strong { color: var(--ink); }
 .legal-updated { font-size: 14px; color: var(--ink-dim); }
 a.brand { text-decoration: none; color: inherit; }
+
+/* Código de la sala visible durante el juego */
+.invite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 6px 4px 12px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease-out), background 0.2s var(--ease-out);
+}
+
+.invite-chip:hover { border-color: var(--hielo); }
+
+.invite-code {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.invite-label {
+  font-size: 13px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--hielo);
+  color: var(--hielo-ink);
+}
+
+.game-mode-pill {
+  flex-basis: 100%;
+  justify-content: center;
+  order: 3;
+}

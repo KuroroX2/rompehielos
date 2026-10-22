@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="style.css?v=20261021213715">
+  <link rel="stylesheet" href="style.css?v=20261021213812">
 </head>
 <body>
 
@@ -273,7 +273,11 @@
     <section id="view-game" class="view-screen">
       <div class="game-header">
         <button type="button" class="back-btn" id="btn-game-back">← Sala</button>
-        <span class="turn-pill pill-purple" id="game-mode-pill">Dinámica</span>
+        <button type="button" class="invite-chip" id="btn-game-invite" title="Invitar a más gente a la sala">
+          <span class="invite-code" id="lbl-game-room-code">-----</span>
+          <span class="invite-label">Invitar</span>
+        </button>
+        <span class="turn-pill pill-purple game-mode-pill" id="game-mode-pill">Dinámica</span>
       </div>
       <div class="game-dynamic-box">
         <div class="eyebrow center" id="game-status"></div>
@@ -478,6 +482,6 @@
     <div>RompeHielos · para que la conversación no muera</div>
   </footer>
 
-  <script type="module" src="app.js?v=20261021213715"></script>
+  <script type="module" src="app.js?v=20261021213812"></script>
 </body>
 </html>

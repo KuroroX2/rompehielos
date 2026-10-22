@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261021213715";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261021213715";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261021213715";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261021213715";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261021213715";
+import { firebaseConfig } from "./firebase-config.js?v=20261021213812";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261021213812";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261021213812";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261021213812";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261021213812";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -688,6 +688,7 @@ function enterRoom(code) {
   $("lobby-active-room-box").hidden = false;
   $("invited-room-banner").hidden = true;
   $("lbl-room-code").textContent = code;
+  $("lbl-game-room-code").textContent = code;
 
   roomWatcher = createRoomWatcher(code, onRoomUpdate, () => {
     showToast("La sala se cerró", "👋");
@@ -874,6 +875,22 @@ async function copyText(text, okMsg) {
 
 $("btn-copy-room-code").addEventListener("click", () => {
   if (roomWatcher) copyText(roomShareUrl(roomWatcher.code), "Enlace de la sala copiado");
+});
+
+// Durante el juego el código sigue a la vista, para sumar a quien llegue después.
+// En el celular abre el menú de compartir; si no existe, copia el enlace.
+$("btn-game-invite").addEventListener("click", async () => {
+  if (!roomWatcher) return;
+  const url = roomShareUrl(roomWatcher.code);
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "RompeHielos", text: `Únete a mi sala de RompeHielos. Código ${roomWatcher.code}`, url });
+      return;
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+    }
+  }
+  copyText(url, `Enlace de la sala ${roomWatcher.code} copiado`);
 });
 
 $("btn-share-whatsapp").addEventListener("click", () => {
