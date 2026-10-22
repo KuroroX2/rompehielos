@@ -2117,3 +2117,86 @@ select.input-field { cursor: pointer; }
   from { opacity: 0.4; }
   to { opacity: 1; }
 }
+
+/* ========== Entrada: mayoría de edad y términos ========== */
+.gate-overlay { z-index: calc(var(--z-toast) + 1); background: var(--bg); }
+
+.gate { text-align: center; }
+
+.gate-mark {
+  display: inline-block;
+  width: 30px;
+  height: 42px;
+  border-radius: 6px;
+  margin: 4px 0 14px;
+}
+
+.gate-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 13px 14px;
+  margin-bottom: 10px;
+  font-size: 15px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.gate-check:has(input:checked) { border-color: var(--hielo); background: var(--hielo-soft); }
+
+.gate-check input {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  accent-color: var(--hielo);
+}
+
+.gate-check a, .legal-page a:not(.back-btn) { color: var(--hielo); text-underline-offset: 3px; }
+.gate .btn { margin-top: 6px; }
+
+a.footer-link-btn { display: inline-flex; align-items: center; }
+
+/* ========== Páginas legales ========== */
+.legal-page {
+  max-width: 68ch;
+  margin: 0 auto;
+  padding: 20px 16px 72px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.legal-page h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(28px, 6vw, 38px);
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 20px 0 6px;
+}
+
+.legal-page h2 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 28px 0 8px;
+}
+
+.legal-page h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 18px 0 6px;
+}
+
+.legal-page p { margin-bottom: 12px; }
+.legal-page ul { padding-left: 22px; margin-bottom: 12px; }
+.legal-page li { margin-bottom: 6px; }
+.legal-page strong { color: var(--ink); }
+.legal-updated { font-size: 14px; color: var(--ink-dim); }
+a.brand { text-decoration: none; color: inherit; }

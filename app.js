@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261005204233";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261005204233";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261005204233";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261005204233";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261005204233";
+import { firebaseConfig } from "./firebase-config.js?v=20261021213129";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261021213129";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261021213129";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261021213129";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261021213129";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -2636,7 +2636,7 @@ function renderTvRoom(w) {
   $("tv-players-list").innerHTML = room.state === "playing" && currentStep(room) ? playerStatusHtml(w) : playerChipsHtml(players, room.hostId, room.state === "playing" ? null : room);
   const status = $("tv-live-status");
   const headline = $("tv-main-headline");
-  $("tv-room-live").classList.remove("lvl-1", "lvl-2", "lvl-3", "lvl-4", "lvl-5");
+  $("tv-room-live").classList.remove("lvl-1", "lvl-2", "lvl-3", "lvl-4", "lvl-5", "lvl-6");
   const results = $("tv-live-results");
   results.innerHTML = "";
 
@@ -3093,5 +3093,34 @@ renderDynamicsGrid();
 renderHostStep();
 renderSoloCategories();
 setupTvCategoryBar();
-restoreRoomFromUrlOrSession();
 subscribeToBank();
+
+// ---------- Entrada: mayoría de edad y términos ----------
+// La app es solo para mayores de 18. Nada se guarda en el servidor (ni se vuelve a una sala)
+// hasta aceptar. Si cambian los términos, se sube la versión y se vuelve a pedir.
+const TERMS_VERSION = "2026-10-21";
+
+function termsAccepted() {
+  return load("local", "rh_terms") === TERMS_VERSION;
+}
+
+function openTermsGate(onAccept) {
+  const adult = $("chk-terms-adult");
+  const accept = $("chk-terms-accept");
+  const enter = $("btn-terms-enter");
+  const sync = () => { enter.disabled = !(adult.checked && accept.checked); };
+  adult.addEventListener("change", sync);
+  accept.addEventListener("change", sync);
+  enter.addEventListener("click", () => {
+    if (!(adult.checked && accept.checked)) return;
+    store("local", "rh_terms", TERMS_VERSION);
+    store("local", "rh_terms_at", new Date().toISOString());
+    $("modal-terms").classList.remove("active");
+    onAccept();
+  });
+  $("modal-terms").classList.add("active");
+  setTimeout(() => adult.focus(), 100);
+}
+
+if (termsAccepted()) restoreRoomFromUrlOrSession();
+else openTermsGate(restoreRoomFromUrlOrSession);

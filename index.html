@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="style.css?v=20261005204233">
+  <link rel="stylesheet" href="style.css?v=20261021213129">
 </head>
 <body>
 
@@ -409,6 +409,25 @@
     </div>
   </div>
 
+  <!-- ========== ENTRADA: MAYORÍA DE EDAD Y TÉRMINOS ========== -->
+  <div class="modal-overlay gate-overlay" id="modal-terms" role="dialog" aria-modal="true" aria-labelledby="lbl-terms-title">
+    <div class="modal-content small gate">
+      <span class="brand-mark gate-mark" aria-hidden="true"></span>
+      <h2 class="panel-title" id="lbl-terms-title">Antes de entrar</h2>
+      <p class="panel-desc">RompeHielos es solo para mayores de 18 años e incluye preguntas explícitas sobre sexualidad.</p>
+      <label class="gate-check">
+        <input type="checkbox" id="chk-terms-adult">
+        <span>Tengo <strong>18 años o más</strong></span>
+      </label>
+      <label class="gate-check">
+        <input type="checkbox" id="chk-terms-accept">
+        <span>Leí y acepto los <a href="terminos.html" target="_blank" rel="noopener">Términos y condiciones</a> y la <a href="privacidad.html" target="_blank" rel="noopener">Política de privacidad</a></span>
+      </label>
+      <button type="button" class="btn btn-primary btn-block" id="btn-terms-enter" disabled>Entrar</button>
+      <p class="muted-small center" id="lbl-terms-minor">Si eres menor de edad, esta app no es para ti.</p>
+    </div>
+  </div>
+
   <!-- ========== EXPULSAR / BANEAR ========== -->
   <div class="modal-overlay" id="modal-player-actions">
     <div class="modal-content small">
@@ -450,9 +469,15 @@
       <span>•</span>
       <button type="button" class="footer-link-btn" id="footer-btn-tv">Modo TV</button>
     </div>
+    <div class="footer-links">
+      <a class="footer-link-btn" href="terminos.html">Términos y condiciones</a>
+      <span>•</span>
+      <a class="footer-link-btn" href="privacidad.html">Política de privacidad</a>
+    </div>
+    <div>Solo para mayores de 18 años</div>
     <div>RompeHielos · para que la conversación no muera</div>
   </footer>
 
-  <script type="module" src="app.js?v=20261005204233"></script>
+  <script type="module" src="app.js?v=20261021213129"></script>
 </body>
 </html>
