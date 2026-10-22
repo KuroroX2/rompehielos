@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022073238";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022073238";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022073238";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022073238";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022073238";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022073238";
+import { firebaseConfig } from "./firebase-config.js?v=20261022085336";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022085336";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022085336";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022085336";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022085336";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022085336";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -1295,7 +1295,7 @@ $("btn-setup-back").addEventListener("click", () => switchView("view-lobby"));
 // ---------- Iniciar dinámica (anfitrión) ----------
 function gameResetFields() {
   return {
-    phase: null, round: 0, pos: 0, deck: [], order: [], current: null,
+    phase: null, round: 0, pos: 0, deck: [], order: [], current: null, highlights: [],
     speaker: null, currentAuthor: null, realIdx: null, category: null,
     variant: null, participants: [], hands: {}, shown: 0, hidden: [],
   };
@@ -1431,7 +1431,7 @@ function questionTypeLabel(info) {
     choice: info.options?.length > 2 ? "☝️ Elige una opción" : "🅰️/🅱️ Elijan una opción",
     yesno: "🙋 Sí o no, en secreto",
     experience: "🔥 ¿Lo has hecho?",
-    open: "🎤 Ronda de respuesta",
+    open: "🎤 Responde una persona",
   }[info.type];
 }
 
@@ -1459,9 +1459,10 @@ function suspectResultsHtml(votes, players) {
   const sorted = [...tally.values()].sort((a, b) => b.count - a.count);
   if (sorted.length === 0) return "";
   const tie = sorted.length > 1 && sorted[0].count === sorted[1].count;
-  const headline = tie ? "🤝 ¡Empate en el primer lugar!" : `👑 ${sorted[0].name} ganó la votación`;
+  const headline = tie ? "🤝 ¡Empate en el primer lugar!" : `👑 ${sorted[0].name}`;
   return `
-    <div class="results-headline">${headline}</div>
+    <div class="reveal-headline">${headline}</div>
+    ${tie ? "" : `<p class="reveal-sub">fue la persona más votada</p>`}
     <div class="results-bars-list">
       ${sorted.map((s, i) => barRow(s.name, s.count, votes.length, { highlight: i === 0 && !tie, color: i === 0 ? "var(--coral)" : "var(--purple)" })).join("")}
     </div>`;
@@ -1478,12 +1479,12 @@ function choiceResultsHtml(votes, options) {
   const max = Math.max(...counts);
   const winners = counts.filter((c) => c === max).length;
   const winner = winners === 1 ? counts.indexOf(max) : -1;
-  const headline = winner === -1 ? "🤝 ¡Empate!" : `🏆 Ganó: ${escapeHtml(options[winner])}`;
+  const headline = winner === -1 ? "🤝 ¡Empate!" : `🏆 ${escapeHtml(options[winner])}`;
   // Con más de 2 opciones se ordenan de más a menos votada
   const order = options.map((_, i) => i);
   if (options.length > 2) order.sort((a, b) => counts[b] - counts[a]);
   return `
-    <div class="results-headline">${headline}</div>
+    <div class="reveal-headline">${headline}</div>
     <div class="results-bars-list">
       ${order
         .map((i) => barRow(`${optionLetter(i)}. ${escapeHtml(options[i])}`, counts[i], votes.length, { highlight: i === winner, color: OPTION_COLORS[i % OPTION_COLORS.length] }))
@@ -1507,7 +1508,13 @@ function hiddenGenderNote(votes, revealGender) {
 function yesNoResultsHtml(votes, info, revealGender) {
   const yes = votes.filter((v) => v.value === "yes").length;
   const no = votes.length - yes;
-  let html = `
+  let intrigue;
+  if (yes === 0) intrigue = "Todos dijeron que no… ¿santos o nadie se atrevió? 😇";
+  else if (yes === votes.length) intrigue = "¡El 100% dijo que sí! Nadie aquí es inocente 😂";
+  else if (yes === 1) intrigue = "Solo 1 persona lo admitió. ¿Quién será? 👀";
+  else intrigue = `${yes} de ${votes.length} dijeron que sí 🤫`;
+  let html = `<div class="reveal-headline">${intrigue}</div>`;
+  html += `
     <div class="stat-pair">
       <div class="stat-box yes"><span class="stat-num">${yes}</span><span>${info.labels[0]}</span></div>
       <div class="stat-box no"><span class="stat-num">${no}</span><span>${info.labels[1]}</span></div>
@@ -1528,20 +1535,21 @@ function yesNoResultsHtml(votes, info, revealGender) {
     if (rows) html += `<div class="results-bars-list">${rows}</div>`;
     html += hiddenGenderNote(votes, revealGender);
   }
-
-  let intrigue;
-  if (yes === 0) intrigue = "Todos dijeron que no... ¿santos o nadie se atrevió? 😇";
-  else if (yes === votes.length) intrigue = "¡El 100% dijo que sí! Nadie aquí es inocente 😂";
-  else if (yes === 1) intrigue = "Solo 1 persona lo admitió. ¿Quién será? 👀";
-  else intrigue = `${yes} de ${votes.length} personas dijeron que sí 🤫`;
-  return html + `<div class="results-headline subtle">${intrigue}</div>`;
+  return html;
 }
 
 const EXPERIENCE_COLORS = ["var(--emerald)", "var(--amber)", "var(--coral)"];
 
 function experienceResultsHtml(votes, revealGender) {
   const counts = [0, 1, 2].map((i) => votes.filter((v) => v.value === i).length);
-  let html = `<div class="results-bars-list">${EXPERIENCE_OPTIONS.map((label, i) =>
+  const [done, want] = counts;
+  let intrigue;
+  if (done === votes.length) intrigue = "¡Todos lo han hecho! 🔥";
+  else if (done === 0 && want > 0) intrigue = `Nadie lo ha hecho… pero ${want} ${want === 1 ? "tiene" : "tienen"} ganas 😏`;
+  else if (done === 0) intrigue = "Nadie lo ha hecho ni le interesa 😇";
+  else if (want > 0) intrigue = `${done} ${done === 1 ? "lo ha hecho" : "lo han hecho"} y ${want} ${want === 1 ? "tiene" : "tienen"} ganas 😏`;
+  else intrigue = `${done} de ${votes.length} ${done === 1 ? "lo ha hecho" : "lo han hecho"} 🤫`;
+  let html = `<div class="reveal-headline">${intrigue}</div><div class="results-bars-list">${EXPERIENCE_OPTIONS.map((label, i) =>
     barRow(label, counts[i], votes.length, { color: EXPERIENCE_COLORS[i], highlight: false })
   ).join("")}</div>`;
 
@@ -1560,15 +1568,59 @@ function experienceResultsHtml(votes, revealGender) {
     if (rows) html += `<div class="results-bars-list">${rows}</div>`;
     html += hiddenGenderNote(votes, revealGender);
   }
+  return html;
+}
 
-  const [done, want] = counts;
-  let intrigue;
-  if (done === votes.length) intrigue = "¡Todos lo han hecho! 🔥";
-  else if (done === 0 && want > 0) intrigue = `Nadie lo ha hecho... pero ${want} ${want === 1 ? "tiene" : "tienen"} ganas 😏`;
-  else if (done === 0) intrigue = "Nadie lo ha hecho ni le interesa 😇";
-  else if (want > 0) intrigue = `${done} ${done === 1 ? "lo ha hecho" : "lo han hecho"} y ${want} ${want === 1 ? "tiene" : "tienen"} ganas 😏`;
-  else intrigue = `${done} de ${votes.length} ${done === 1 ? "lo ha hecho" : "lo han hecho"} 🤫`;
-  return html + `<div class="results-headline subtle">${intrigue}</div>`;
+// ---------- Resumen de la partida ----------
+// Al mostrar cada resultado se guarda un dato agregado y anónimo (nunca quién votó qué),
+// para cerrar la partida con lo mejor de la noche. Se borra al terminar el juego.
+function resultHighlight(room, votes, players) {
+  if (votes.length < 2) return null;
+  const q = room.deck[room.pos];
+  const info = classifyGroupQuestion(q, room.category);
+  const t = questionText(q);
+  const of = votes.length;
+  if (info.type === "yesno") return { k: "yes", t, n: votes.filter((v) => v.value === "yes").length, of };
+  if (info.type === "experience") {
+    return { k: "exp", t, n: votes.filter((v) => v.value === 0).length, want: votes.filter((v) => v.value === 1).length, of };
+  }
+  if (info.type === "suspect") {
+    const tally = new Map();
+    votes.forEach((v) => tally.set(v.value, (tally.get(v.value) || 0) + 1));
+    const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1]);
+    if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) return null;
+    const p = players.find((x) => x.id === sorted[0][0]);
+    return p ? { k: "who", t, name: `${p.avatar || "👤"} ${p.name}` } : null;
+  }
+  if (info.type === "open" && room.speaker) {
+    const fire = votes.filter((v) => v.value === 0).length;
+    return fire * 2 > of ? { k: "best", t, name: `${room.speaker.avatar} ${room.speaker.name}`, n: fire, of } : null;
+  }
+  return null;
+}
+
+function summaryHtml(highlights, rounds) {
+  const items = [];
+  const confessed = highlights.filter((h) => (h.k === "yes" || h.k === "exp") && h.n > 0).sort((a, b) => b.n / b.of - a.n / a.of)[0];
+  if (confessed) items.push({ icon: "🙊", title: "Lo más confesado", body: `${Math.round((confessed.n / confessed.of) * 100)}% dijo que sí`, quote: confessed.t });
+  const wanted = highlights.filter((h) => h.k === "exp" && h.want > 0).sort((a, b) => b.want / b.of - a.want / a.of)[0];
+  if (wanted) items.push({ icon: "😏", title: "Lo que más ganas da", body: `${wanted.want} de ${wanted.of} ${wanted.want === 1 ? "tiene" : "tienen"} ganas`, quote: wanted.t });
+  const counts = new Map();
+  highlights.filter((h) => h.k === "who").forEach((h) => counts.set(h.name, (counts.get(h.name) || 0) + 1));
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (top) items.push({ icon: "👑", title: "La persona más votada", body: `${escapeHtml(top[0])} · ganó ${top[1]} ${top[1] === 1 ? "votación" : "votaciones"}` });
+  const best = highlights.filter((h) => h.k === "best").sort((a, b) => b.n / b.of - a.n / a.of)[0];
+  if (best) items.push({ icon: "🔥", title: "La mejor respuesta", body: escapeHtml(best.name), quote: best.t });
+  return `
+    <div class="summary">
+      <div class="reveal-headline">¡Qué partida! 🎉</div>
+      <p class="reveal-sub">${rounds} ${rounds === 1 ? "pregunta jugada" : "preguntas jugadas"}</p>
+      ${items.length ? `<div class="summary-list">${items.map((it) => `
+        <div class="summary-item">
+          <span class="summary-icon" aria-hidden="true">${it.icon}</span>
+          <div><strong>${it.title}</strong><span>${it.body}</span>${it.quote ? `<q>${escapeHtml(it.quote)}</q>` : ""}</div>
+        </div>`).join("")}</div>` : ""}
+    </div>`;
 }
 
 function voteButtonsHtml(buttons) {
@@ -1617,7 +1669,8 @@ function currentStep(room) {
   const g = room.gameId;
   if (room.mode === "preguntas") {
     const info = classifyGroupQuestion(room.deck[room.pos], room.category);
-    if (info.type === "open" || room.phase === "results") return null;
+    if (room.phase === "results" || room.phase === "summary") return null;
+    if (info.type === "open") return room.phase === "rate" ? { key: `${g}:${room.round}`, verb: "votó", exceptId: room.speaker?.id } : null;
     return { key: `${g}:${room.round}`, verb: "votó" };
   }
   if (room.mode === "persona") {
@@ -1674,6 +1727,18 @@ function renderPreguntas(w) {
 
   $("game-status").textContent = `${cat?.titulo || ""} · Pregunta ${room.pos + 1} de ${room.deck.length}${nivel ? ` · ${nivel.icon} ${nivel.title}` : ""}`;
 
+  if (room.phase === "summary") {
+    $("game-status").textContent = `${cat?.titulo || ""} · Resumen`;
+    ensurePanel(`summary|${room.gameId}|${(room.highlights || []).length}`, summaryHtml(room.highlights || [], room.round + 1));
+    $("game-host-bar").innerHTML = isHost()
+      ? hostButtons([
+          { action: "next-question", label: "Seguir jugando", cls: "btn-secondary" },
+          { action: "end-game", label: "Elegir otro juego", cls: "btn-purple" },
+        ])
+      : nonHostNote("El anfitrión elige si siguen o cambian de juego.");
+    return;
+  }
+
   let privacy = "";
   if (info.type === "yesno" || info.type === "experience") privacy = revealGender ? "🛡️ Voto anónimo. Se ve el total y el desglose de los géneros con 3 o más personas." : "🛡️ Voto anónimo. Solo se muestra el total del grupo.";
   else if (info.type === "suspect") privacy = "🛡️ Voto secreto: nadie ve por quién votaste.";
@@ -1695,23 +1760,7 @@ function renderPreguntas(w) {
 
   const host = isHost();
   if (info.type === "open") {
-    const sp = room.speaker;
-    const isMe = sp?.id === profile.playerId;
-    $("g-vote-area").innerHTML = sp
-      ? `<div class="speaker-card ${isMe ? "is-me" : ""}">
-           <span class="eyebrow">Le toca responder a</span>
-           <div class="speaker-name">${sp.avatar} ${escapeHtml(sp.name)}</div>
-           ${isMe ? "<p>🎤 ¡Te toca! Responde en voz alta.</p>" : "<p>Después, cualquiera puede opinar.</p>"}
-         </div>`
-      : `<div class="speaker-card"><p>Respondan en voz alta, uno por uno.</p></div>`;
-    $("g-progress").textContent = "";
-    $("g-results").innerHTML = "";
-    $("game-host-bar").innerHTML = host
-      ? hostButtons([
-          { action: "reroll-speaker", label: "🎲 Otra persona", cls: "btn-secondary" },
-          { action: "next-question", label: "Siguiente pregunta ➔" },
-        ])
-      : nonHostNote("El anfitrión pasa a la siguiente pregunta.");
+    renderOpenQuestion(w, players, host);
     return;
   }
 
@@ -1762,6 +1811,131 @@ function renderPreguntas(w) {
   }
   $("game-host-bar").innerHTML = host
     ? hostButtons([{ action: "next-question", label: "Siguiente pregunta ➔" }])
+    : nonHostNote("Esperando la siguiente pregunta...");
+}
+
+// ---------- Preguntas abiertas: ruleta + veredicto del grupo ----------
+// 1) Una ruleta elige quién responde en voz alta. 2) Cuando termina, el resto vota su respuesta
+// en secreto. 3) Se revela el veredicto, igual que en una votación.
+const RATING_OPTIONS = [
+  { value: 0, label: "🔥 ¡Buenísima!" },
+  { value: 1, label: "😂 Me hizo reír" },
+  { value: 2, label: "🤥 No me la creo" },
+  { value: 3, label: tr("😴 Fome", "😴 Aburrida") },
+];
+const RATING_COLORS = ["var(--warn)", "var(--hielo)", "var(--bad)", "var(--ink-dim)"];
+const RATING_VERDICTS = [
+  "🔥 ¡Respuesta aprobada!",
+  "😂 ¡Hizo reír a todos!",
+  "🤥 Nadie le cree…",
+  tr("😴 Respuesta fome, sin pena ni gloria", "😴 Pasó sin pena ni gloria"),
+];
+const spunSpeakers = new Set();
+
+function prefersReducedMotion() {
+  return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+}
+
+function openVoters(room, players) {
+  return players.filter((p) => p.id !== room.speaker?.id);
+}
+
+// Los nombres pasan cada vez más lento hasta quedar en la persona elegida
+function spinToSpeaker(card, players) {
+  const target = card.querySelector(".speaker-name");
+  const final = target?.textContent;
+  const names = players.map((p) => `${p.avatar || "👤"} ${p.name}`);
+  if (!target || names.length < 2 || prefersReducedMotion()) return;
+  card.classList.add("spinning");
+  const start = performance.now();
+  let i = Math.floor(Math.random() * names.length);
+  let delay = 55;
+  const tick = () => {
+    if (performance.now() - start > 1800) {
+      target.textContent = final;
+      card.classList.remove("spinning");
+      card.classList.add("landed");
+      return;
+    }
+    target.textContent = names[i++ % names.length];
+    delay *= 1.13;
+    setTimeout(tick, delay);
+  };
+  tick();
+}
+
+function ratingResultsHtml(votes, speakerName) {
+  const counts = RATING_OPTIONS.map((o) => votes.filter((v) => v.value === o.value).length);
+  const max = Math.max(...counts);
+  const winners = counts.map((c, i) => (c === max && max > 0 ? i : -1)).filter((i) => i >= 0);
+  const verdict = winners.length === 1 ? RATING_VERDICTS[winners[0]] : "🤷 Opiniones divididas";
+  return `
+    <div class="reveal-headline">${verdict}</div>
+    <p class="reveal-sub">Lo que opinó el grupo de la respuesta de ${escapeHtml(speakerName || "")}</p>
+    <div class="results-bars-list">
+      ${RATING_OPTIONS.map((o, i) => barRow(o.label, counts[i], votes.length, { color: RATING_COLORS[i], highlight: winners.length === 1 && winners[0] === i })).join("")}
+    </div>`;
+}
+
+function renderOpenQuestion(w, players, host) {
+  const room = w.room;
+  const sp = room.speaker;
+  const isMe = sp?.id === profile.playerId;
+  const area = $("g-vote-area");
+
+  if (room.phase === "vote" || !sp) {
+    const key = `${room.gameId}|${room.round}|${sp?.id || "-"}`;
+    if (area.dataset.key !== key) {
+      area.dataset.key = key;
+      area.innerHTML = sp
+        ? `<div class="speaker-card ${isMe ? "is-me" : ""}">
+             <span class="eyebrow">Le toca responder en voz alta a</span>
+             <div class="speaker-name">${sp.avatar} ${escapeHtml(sp.name)}</div>
+             <p>${isMe ? "🎤 ¡Te toca! Responde y después el grupo vota tu respuesta." : "Cuando termine de responder, todos votan su respuesta en secreto."}</p>
+           </div>`
+        : `<div class="speaker-card"><p>Respondan en voz alta, uno por uno.</p></div>`;
+      if (sp && !spunSpeakers.has(key)) {
+        spunSpeakers.add(key);
+        spinToSpeaker(area.querySelector(".speaker-card"), players);
+      }
+    }
+    $("g-progress").textContent = "";
+    $("g-results").innerHTML = "";
+    $("game-host-bar").innerHTML = host
+      ? hostButtons(sp
+          ? [{ action: "reroll-speaker", label: "🎲 Otra persona", cls: "btn-secondary" }, { action: "open-rate", label: "¡Ya respondió! A votar", cls: "btn-purple" }]
+          : [{ action: "next-question", label: "Siguiente pregunta" }])
+      : nonHostNote("El anfitrión avisa cuando termine de responder.");
+    return;
+  }
+
+  const voters = openVoters(room, players);
+  const votes = w.votes;
+  const everyoneVoted = allDone(votes.length, voters.length);
+
+  if (room.phase === "rate") {
+    if (isMe) area.innerHTML = `<div class="speaker-card is-me"><div class="speaker-name">🙈</div><p>El grupo está votando tu respuesta…</p></div>`;
+    else if (getMyVote(room)) area.innerHTML = votedHtml();
+    else {
+      area.innerHTML = `<p class="guess-prompt">¿Qué te pareció la respuesta de ${escapeHtml(sp.name)}?</p>` +
+        voteButtonsHtml(RATING_OPTIONS.map((o) => ({ value: o.value, label: o.label, html: o.label, cls: "option compact" })));
+    }
+    $("g-progress").textContent = `🗳️ ${votes.length} de ${voters.length} votaron`;
+    $("g-results").innerHTML = "";
+    $("game-host-bar").innerHTML = host
+      ? hostButtons([waitingButton(everyoneVoted, votes.length, voters.length, "show-results", "Ver el veredicto", room), SKIP_BUTTON])
+      : nonHostNote("Cuando todos voten, el anfitrión muestra el veredicto.");
+    return;
+  }
+
+  // Veredicto
+  area.innerHTML = "";
+  $("g-progress").textContent = "";
+  $("g-results").innerHTML = votes.length
+    ? `<div class="results-box">${ratingResultsHtml(votes, sp.name)}</div>`
+    : `<p class="muted-small center">Nadie votó esta respuesta.</p>`;
+  $("game-host-bar").innerHTML = host
+    ? hostButtons([{ action: "next-question", label: "Siguiente pregunta" }])
     : nonHostNote("Esperando la siguiente pregunta...");
 }
 
@@ -2555,9 +2729,18 @@ const HOST_ACTIONS = {
 
   "show-results": () => {
     const w = roomWatcher;
-    if (!doneOrForced(w.votes.length, activePlayers(w.players).length)) return;
-    return hostUpdate({ phase: "results" });
+    const r = w.room;
+    const players = activePlayers(w.players);
+    const open = r.mode === "preguntas" && classifyGroupQuestion(r.deck[r.pos], r.category).type === "open";
+    const expected = open ? openVoters(r, players).length : players.length;
+    if (!doneOrForced(w.votes.length, expected)) return;
+    const fields = { phase: "results" };
+    const highlight = r.mode === "preguntas" ? resultHighlight(r, w.votes, players) : null;
+    if (highlight) fields.highlights = [...(r.highlights || []), highlight].slice(-40);
+    return hostUpdate(fields);
   },
+
+  "open-rate": () => hostUpdate({ phase: "rate" }),
 
   "duo-reveal": () => {
     const w = roomWatcher;
@@ -2676,7 +2859,12 @@ $("game-panel").addEventListener("keydown", (e) => {
 
 $("btn-game-back").addEventListener("click", () => {
   if (isHost()) {
-    if (confirm(tr("¿Terminar este juego? Podrás elegir otro al tiro.", "¿Terminar este juego? Podrás elegir otro enseguida."))) HOST_ACTIONS["end-game"]();
+    const r = roomWatcher?.room;
+    if (r?.mode === "preguntas" && r.phase !== "summary" && (r.highlights || []).length > 0) {
+      if (confirm("¿Terminar este juego? Primero verán el resumen de la partida.")) hostUpdate({ phase: "summary" });
+    } else if (confirm(tr("¿Terminar este juego? Podrás elegir otro al tiro.", "¿Terminar este juego? Podrás elegir otro enseguida."))) {
+      HOST_ACTIONS["end-game"]();
+    }
   } else if (confirm("¿Salir de la sala?")) {
     leaveRoom();
   }
@@ -2738,7 +2926,10 @@ function renderTvRoom(w) {
   const dyn = getDynamic(room.dynamicKey);
   status.textContent = `${dyn.icon} ${dyn.title}`;
 
-  if (room.mode === "preguntas") {
+  if (room.mode === "preguntas" && room.phase === "summary") {
+    headline.textContent = "Resumen de la partida";
+    results.innerHTML = summaryHtml(room.highlights || [], room.round + 1);
+  } else if (room.mode === "preguntas") {
     const question = room.deck[room.pos] || "";
     const info = classifyGroupQuestion(question, room.category);
     headline.textContent = questionText(question);
@@ -2748,7 +2939,14 @@ function renderTvRoom(w) {
       status.textContent = `${dyn.icon} ${dyn.title} · ${nivel.icon} ${nivel.title}`;
     }
     if (info.type === "open") {
-      results.innerHTML = room.speaker ? `<div class="results-headline">🎤 Responde: ${room.speaker.avatar} ${escapeHtml(room.speaker.name)}</div>` : "";
+      const sp = room.speaker;
+      if (room.phase === "rate") {
+        results.innerHTML = `<div class="results-headline">🗳️ ${w.votes.length} de ${openVoters(room, players).length} votaron la respuesta de ${escapeHtml(sp?.name || "")}</div>`;
+      } else if (room.phase === "results" && w.votes.length) {
+        results.innerHTML = `<div class="results-box">${ratingResultsHtml(w.votes, sp?.name)}</div>`;
+      } else {
+        results.innerHTML = sp ? `<div class="results-headline">🎤 Responde: ${sp.avatar} ${escapeHtml(sp.name)}</div>` : "";
+      }
       return;
     }
     if (room.phase === "vote") {

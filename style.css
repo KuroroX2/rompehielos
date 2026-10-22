@@ -220,8 +220,8 @@ h1, h2, h3, h4 { text-wrap: balance; }
 }
 
 @keyframes viewIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+  from { transform: translateY(6px); }
+  to { transform: none; }
 }
 
 .center { text-align: center; }
@@ -655,8 +655,8 @@ h1, h2, h3, h4 { text-wrap: balance; }
 .question-card-3d.shake { animation: cardDeal 0.32s var(--ease-out); }
 
 @keyframes cardDeal {
-  from { transform: translateX(18px) rotate(2.5deg); opacity: 0.4; }
-  to { transform: none; opacity: 1; }
+  from { transform: translateX(18px) rotate(2.5deg); }
+  to { transform: none; }
 }
 
 .card-category-indicator {
@@ -1593,8 +1593,8 @@ select.input-field { cursor: pointer; }
 .wall-note.color-orange { background: oklch(0.87 0.09 60); }
 
 @keyframes noteIn {
-  from { transform: translateY(10px) rotate(var(--rot, -1.5deg)); opacity: 0; }
-  to { transform: rotate(var(--rot, -1.5deg)); opacity: 1; }
+  from { transform: translateY(10px) rotate(var(--rot, -1.5deg)); }
+  to { transform: rotate(var(--rot, -1.5deg)); }
 }
 
 /* ========== Modo TV ========== */
@@ -2088,8 +2088,8 @@ select.input-field { cursor: pointer; }
 }
 
 @keyframes fadeOnly {
-  from { opacity: 0.4; }
-  to { opacity: 1; }
+  from { transform: none; }
+  to { transform: none; }
 }
 
 /* ========== Entrada: mayoría de edad y términos ========== */
@@ -2298,4 +2298,94 @@ a.brand { text-decoration: none; color: inherit; }
   z-index: 5;
   margin-top: 16px;
   box-shadow: 0 10px 24px -8px oklch(0 0 0 / 0.8);
+}
+
+/* ========== Revelación: la frase primero, grande; las barras llegan después ========== */
+.reveal-headline {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 6.4vw, 32px);
+  line-height: 1.22;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--ink);
+  margin: 6px 0 4px;
+  animation: revealIn 0.5s var(--ease-out);
+}
+
+.reveal-sub {
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 15px;
+  margin: 0 0 12px;
+  animation: revealIn 0.5s var(--ease-out) 0.1s backwards;
+}
+
+.reveal-headline + .stat-pair,
+.reveal-headline + .results-bars-list { margin-top: 14px; }
+
+/* Solo movimiento: el contenido nunca depende de que la animación corra para verse */
+@keyframes revealIn {
+  from { transform: translateY(10px) scale(0.97); }
+  to { transform: none; }
+}
+
+.results-box .stat-pair,
+.results-box .result-row {
+  animation: revealIn 0.45s var(--ease-out) backwards;
+}
+
+.results-box .stat-pair { animation-delay: 0.35s; }
+.results-bars-list .result-row:nth-child(1) { animation-delay: 0.35s; }
+.results-bars-list .result-row:nth-child(2) { animation-delay: 0.5s; }
+.results-bars-list .result-row:nth-child(3) { animation-delay: 0.65s; }
+.results-bars-list .result-row:nth-child(4) { animation-delay: 0.8s; }
+.results-bars-list .result-row:nth-child(n+5) { animation-delay: 0.9s; }
+
+/* Ruleta de quién responde */
+.speaker-card.spinning .speaker-name { opacity: 0.75; }
+.speaker-card.landed .speaker-name { animation: landed 0.5s var(--ease-out); }
+
+@keyframes landed {
+  0% { transform: scale(0.9); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* Resumen de la partida */
+.summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.summary-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  animation: revealIn 0.45s var(--ease-out) backwards;
+}
+
+.summary-item:nth-child(2) { animation-delay: 0.15s; }
+.summary-item:nth-child(3) { animation-delay: 0.3s; }
+.summary-item:nth-child(4) { animation-delay: 0.45s; }
+
+.summary-icon { font-size: 28px; line-height: 1; }
+.summary-item strong { display: block; font-size: 15px; color: var(--ink-muted); }
+.summary-item span { display: block; font-size: 18px; font-weight: 800; color: var(--ink); }
+.summary-item q {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--ink-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-headline, .reveal-sub, .results-box .stat-pair, .results-box .result-row, .summary-item,
+  .speaker-card.landed .speaker-name { animation: none; }
 }
