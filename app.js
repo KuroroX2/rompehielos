@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022073002";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022073002";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022073002";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022073002";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022073002";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022073002";
+import { firebaseConfig } from "./firebase-config.js?v=20261022073238";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022073238";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022073238";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022073238";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022073238";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022073238";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -262,7 +262,7 @@ function updateSoloCard() {
   $("solo-cat-badge").textContent = `${cat.icono || ""} ${cat.titulo}`;
   $("solo-counter").textContent = `${solo.index + 1} / ${total}`;
   $("solo-question-text").textContent = questionText(question);
-  $("lbl-table-mode-text").textContent = solo.tableMode ? "Giro: sí" : "Giro: no";
+  $("lbl-table-mode-text").textContent = solo.tableMode ? "Girar carta: sí" : "Girar carta: no";
 }
 
 function soloStep(delta) {
@@ -918,7 +918,8 @@ $("btn-lobby-tv-shortcut").addEventListener("click", () => {
 
 // ---------- Sala de espera ----------
 // Cada vuelta a la sala de espera tiene un id nuevo; un jugador está listo si marcó ese id.
-// Al empezar una dinámica el id cambia, así que al volver todos deben marcar "listo" otra vez.
+// "Listo" es solo un aviso para el anfitrión: puede empezar apenas haya 2 personas.
+// El anfitrión no marca listo (es quien empieza).
 function lobbyKey(room) {
   return room?.lobbyId || "inicio";
 }
@@ -931,7 +932,7 @@ function playerChipsHtml(players, hostId, room = null) {
   const canKick = isHost();
   return players
     .map((p) => {
-      const readyMark = room ? (isReady(p, room) ? " ✅" : " ⏳") : "";
+      const readyMark = room && p.id !== hostId ? (isReady(p, room) ? " ✅" : " ⏳") : "";
       const kickable = canKick && p.id !== profile.playerId;
       return `<div class="player-chip ${p.id === hostId ? "is-host" : ""} ${kickable ? "kickable" : ""}" ${kickable ? `data-kick="${escapeAttr(p.id)}" data-kick-name="${escapeAttr(p.name)}" role="button" title="Tocar para expulsar"` : ""}>
         <span>${p.avatar || "👤"}</span><span>${escapeHtml(p.name)}</span>${p.id === hostId ? " 👑" : ""}${readyMark}
@@ -942,8 +943,9 @@ function playerChipsHtml(players, hostId, room = null) {
 
 function lobbyReadiness(w) {
   const active = activePlayers(w.players);
-  const readyCount = active.filter((p) => isReady(p, w.room)).length;
-  return { active, readyCount, allReady: active.length >= 2 && readyCount === active.length };
+  const guests = active.filter((p) => p.id !== w.room.hostId);
+  const readyCount = guests.filter((p) => isReady(p, w.room)).length;
+  return { active, guests, readyCount, canStart: active.length >= 2, allReady: active.length >= 2 && readyCount === guests.length };
 }
 
 function genderCounts(players) {
@@ -1026,15 +1028,29 @@ function step2Section(title, rows) {
   return rows ? `<span class="field-label">${title}</span><div class="type-toggle-list">${rows}</div>` : "";
 }
 
-function renderDynamicsGrid() {
-  $("dynamics-grid").innerHTML = ROOM_DYNAMICS.map(
-    (d) => `
-      <button type="button" class="dynamic-card-radio ${d.key === selectedDynamicKey ? "selected" : ""}" data-key="${d.key}">
-        <span class="dyn-icon">${d.icon}</span>
+// Los juegos que mejor funcionan van arriba; el resto queda a un toque en "Más juegos"
+const FEATURED_DYNAMICS = ["secretos_intimos", "quien_es_mas_probable", "confesiones", "dilemas_absurdos"];
+
+function dynamicCardHtml(d) {
+  const on = d.key === selectedDynamicKey;
+  return `
+      <button type="button" class="dynamic-card-radio ${on ? "selected" : ""}" data-key="${d.key}" aria-pressed="${on}">
+        <span class="dyn-icon" aria-hidden="true">${d.icon}</span>
         <strong>${d.title}</strong>
         <small>${d.desc}</small>
-      </button>`
-  ).join("");
+      </button>`;
+}
+
+function renderDynamicsGrid() {
+  const featured = FEATURED_DYNAMICS.map(getDynamic);
+  const others = ROOM_DYNAMICS.filter((d) => !FEATURED_DYNAMICS.includes(d.key));
+  const openMore = others.some((d) => d.key === selectedDynamicKey) && hostStep === 1 && selectedDynamicKey !== FEATURED_DYNAMICS[0];
+  $("dynamics-grid").innerHTML = `
+    <div class="dynamics-featured">${featured.map(dynamicCardHtml).join("")}</div>
+    <details class="more-games" ${openMore ? "open" : ""}>
+      <summary>Más juegos (${others.length})</summary>
+      <div class="dynamics-more">${others.map(dynamicCardHtml).join("")}</div>
+    </details>`;
 }
 
 function renderHostStep() {
@@ -1055,12 +1071,16 @@ function renderHostStep() {
   } else if (pool && isSpicy(dyn)) {
     const byLevel = (lvl) => pool.questions.filter((q) => q.lvl === lvl && setup.temas.has(q.tema)).length;
     const byTema = (tema) => pool.questions.filter((q) => q.tema === tema && setup.levels.has(q.lvl)).length;
-    html += step2Section("Niveles de intensidad (marca los que quieran)", levelsFor(dyn).map((n) =>
+    html += step2Section("Intensidad (marca los niveles que quieran)", levelsFor(dyn).map((n) =>
       toggleRowHtml({ attr: "lvl", value: n.lvl, on: setup.levels.has(n.lvl), icon: n.icon, title: n.title, desc: n.desc, count: byLevel(n.lvl) })
     ).join(""));
-    html += step2Section("Temas", TEMAS_18.map((t) =>
-      toggleRowHtml({ attr: "tema", value: t.tema, on: setup.temas.has(t.tema), icon: t.icon, title: t.title, count: byTema(t.tema) })
-    ).join(""));
+    const temasOn = TEMAS_18.filter((t) => setup.temas.has(t.tema)).length;
+    html += `<details class="step2-fold" ${temasOpen ? "open" : ""}>
+      <summary>Temas: ${temasOn === TEMAS_18.length ? "todos" : `${temasOn} de ${TEMAS_18.length}`}</summary>
+      <div class="type-toggle-list">${TEMAS_18.map((t) =>
+        toggleRowHtml({ attr: "tema", value: t.tema, on: setup.temas.has(t.tema), icon: t.icon, title: localize(t.title), count: byTema(t.tema) })
+      ).join("")}</div>
+    </details>`;
   } else if (pool) {
     const counts = {};
     pool.questions.forEach((q) => {
@@ -1099,7 +1119,7 @@ function updateDynamicOptions() {
     const outsiders = players.filter((p) => p.gender !== dyn.audience).length;
     if (outsiders > 0) {
       const audienceLabel = dyn.audience === "hombre" ? "hombres" : "mujeres";
-      warning = `Esta dinámica está pensada para una junta solo de ${audienceLabel}, y en la sala hay ${outsiders} ${outsiders === 1 ? "persona" : "personas"} de otro género.`;
+      warning = localize(`Este juego está pensado para una junta solo de ${audienceLabel}, y en la sala hay ${outsiders} ${outsiders === 1 ? "persona" : "personas"} de otro género.`);
     }
   }
   if (isSpicy(dyn) && (setup.levels.has(4) || setup.levels.has(5))) {
@@ -1109,44 +1129,45 @@ function updateDynamicOptions() {
     warning = (warning ? warning + " " : "") + "El nivel 6 pregunta por la gente de esta sala: ojo si hay parejas o ex en el grupo.";
   }
   if (dyn.pair && players.length !== 2) {
-    warning = `Esta dinámica es para 2 personas y en la sala hay ${players.length}.`;
+    warning = `Este juego es para 2 personas y en la sala hay ${players.length}.`;
   }
   $("single-gender-warning-box").hidden = !warning;
   $("lbl-single-gender-desc").textContent = warning;
 
-  // El botón de empezar aparece solo si todos están listos y hay preguntas para jugar
-  const ready = roomWatcher?.room ? lobbyReadiness(roomWatcher) : { allReady: false, readyCount: 0, active: [] };
+  // Se puede empezar con 2 personas; "listo" solo avisa quién está atento
+  const ready = roomWatcher?.room ? lobbyReadiness(roomWatcher) : { canStart: false, allReady: false, readyCount: 0, guests: [], active: [] };
   const questionCount = usesQuestions ? setupQuestions(dyn).length : 1;
   const pairOk = !dyn.pair || ready.active.length === 2;
-  const canStart = ready.allReady && questionCount > 0 && pairOk;
+  const canStart = ready.canStart && questionCount > 0 && pairOk;
+  const pending = ready.guests.length - ready.readyCount;
   $("btn-start-dynamic").hidden = !canStart;
-  $("btn-start-dynamic").textContent = usesQuestions ? `🚀 Empezar para todos (${questionCount} preguntas)` : "🚀 Empezar para todos";
-  $("start-wait-msg").hidden = canStart;
-  const me = roomWatcher?.players.find((p) => p.id === profile.playerId);
-  const imReady = !!(me && roomWatcher?.room && isReady(me, roomWatcher.room));
+  $("btn-start-dynamic").textContent = (ready.allReady ? "Empezar" : `Empezar igual (${ready.readyCount} de ${ready.guests.length} listos)`) +
+    (usesQuestions ? ` · ${questionCount} preguntas` : "");
+  $("start-wait-msg").hidden = canStart && pending === 0;
   $("start-wait-msg").textContent =
     questionCount === 0 ? (isSpicy(dyn) ? "☝️ Marca al menos un nivel y un tema." : "☝️ Marca al menos un tipo de pregunta.")
-    : ready.active.length < 2 ? "👥 Se necesitan al menos 2 jugadores para empezar."
+    : ready.active.length < 2 ? "👥 Invita al menos a 1 persona más para empezar."
     : !pairOk ? "💞 Secretos en pareja se juega con exactamente 2 personas en la sala."
-    : !imReady ? "✋ Tú también tienes que marcar \"listo\" en la sala de espera."
-    : `⏳ Esperando que todos estén listos (${ready.readyCount} de ${ready.active.length}).`;
+    : pending > 0 ? `⏳ ${pending === 1 ? "Falta 1 persona" : `Faltan ${pending} personas`} por marcar listo. Puedes esperar o empezar igual.`
+    : "";
 }
 
+// Tocar un juego lleva directo a sus ajustes, y los invitados ven qué juego viene
 $("dynamics-grid").addEventListener("click", (e) => {
   const card = e.target.closest(".dynamic-card-radio");
   if (!card) return;
   selectedDynamicKey = card.dataset.key;
-  document.querySelectorAll(".dynamic-card-radio").forEach((c) => c.classList.toggle("selected", c === card));
-});
-
-$("btn-host-next-step").addEventListener("click", () => {
   setup.types = new Set(QUESTION_TYPES.map((t) => t.type));
   hostStep = 2;
+  renderDynamicsGrid();
   renderHostStep();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  hostUpdate({ nextGame: selectedDynamicKey });
 });
 
 $("btn-host-prev-step").addEventListener("click", () => {
   hostStep = 1;
+  renderDynamicsGrid();
   renderHostStep();
 });
 
@@ -1154,6 +1175,11 @@ function toggleInSet(set, value) {
   if (set.has(value)) set.delete(value);
   else set.add(value);
 }
+
+let temasOpen = false;
+$("step2-content").addEventListener("toggle", (e) => {
+  if (e.target.classList?.contains("step2-fold")) temasOpen = e.target.open;
+}, true);
 
 $("step2-content").addEventListener("click", (e) => {
   const btn = e.target.closest(".type-toggle");
@@ -1177,18 +1203,29 @@ function renderLobby(w) {
   $("lbl-host-indicator").textContent = host ? "👑 Eres el anfitrión" : `Anfitrión: ${hostPlayer?.name || "..."}`;
   $("host-lobby-actions").hidden = !host;
   $("non-host-wait-msg").hidden = host;
-  $("lbl-host-lobby-hint").textContent =
-    active.length < 2 ? "Invita al menos a 1 persona más." : readyCount === active.length ? "✅ Todos listos: elige el juego y empiecen." : "Puedes ir eligiendo el juego mientras el resto marca listo.";
-  $("setup-room-pill").textContent = `👥 Sala ${w.code} · ✅ ${readyCount} de ${active.length} listos`;
+  const { guests } = lobbyReadiness(w);
+  const canPlay = active.length >= 2;
+  $("lbl-host-lobby-hint").textContent = !canPlay
+    ? "Invita al menos a 1 persona más para empezar."
+    : readyCount === guests.length ? "Todos listos." : `${readyCount} de ${guests.length} listos · puedes empezar igual.`;
+  $("btn-quick-start").disabled = !canPlay;
+  $("lbl-quick-start").textContent = tr("¡Jugar Secretos +18 al tiro!", "Jugar Secretos +18 ahora");
+  $("setup-room-pill").textContent = `Sala ${w.code} · ${active.length} ${active.length === 1 ? "persona" : "personas"}`;
 
   $("lbl-ready-status").textContent =
-    (active.length < 2 ? "👥 Se necesitan al menos 2 jugadores" : `✅ ${readyCount} de ${active.length} listos`) +
+    (!canPlay ? "👥 Se necesitan al menos 2 personas" : `${readyCount} de ${guests.length} listos`) +
     (host && active.length > 1 ? " · Toca a alguien para expulsarlo" : "");
+
+  // Los invitados ven qué juego está preparando el anfitrión
+  const next = w.room.nextGame ? getDynamic(w.room.nextGame) : null;
+  $("lbl-guest-wait").textContent = next ? "El anfitrión está preparando:" : "El anfitrión está eligiendo el juego.";
+  $("guest-next-game").hidden = !next;
+  if (next) $("guest-next-game").innerHTML = `<span class="dyn-icon" aria-hidden="true">${next.icon}</span><div><strong>${next.title}</strong><small>${next.desc}</small></div>`;
 
   const me = w.players.find((p) => p.id === profile.playerId);
   const imReady = me ? isReady(me, w.room) : false;
   const readyBtn = $("btn-toggle-ready");
-  readyBtn.hidden = false;
+  readyBtn.hidden = host;
   readyBtn.innerHTML = imReady
     ? `<span class="ready-main">✅ ¡Estás listo!</span><span class="ready-sub">Toca para cancelar</span>`
     : `<span class="ready-main">✋ Toca aquí cuando estés listo</span>`;
@@ -1235,6 +1272,13 @@ function onRoomUpdate(w) {
   if (w.room.state === "playing") {
     if (view === "view-lobby" || view === "view-setup") switchView("view-game");
     renderGame(w);
+  } else if (view === "view-game" && isHost()) {
+    // Al terminar un juego, el anfitrión cae directo en "¿A qué jugamos?"
+    lastPanelKey = null;
+    hostStep = 1;
+    renderDynamicsGrid();
+    renderHostStep();
+    switchView("view-setup");
   } else if (view === "view-game" || (view === "view-setup" && !isHost())) {
     lastPanelKey = null;
     switchView("view-lobby");
@@ -1279,11 +1323,22 @@ function pickSpeaker(players, exceptId) {
   return pick ? { id: pick.id, name: pick.name, avatar: pick.avatar || "👤" } : null;
 }
 
-$("btn-start-dynamic").addEventListener("click", async () => {
+$("btn-start-dynamic").addEventListener("click", () => startGame());
+
+// "Jugar al tiro": Secretos +18 con niveles 1 y 2 y todos los temas, sin pasar por los ajustes
+$("btn-quick-start").addEventListener("click", () => {
+  selectedDynamicKey = "secretos_intimos";
+  setup.levels = new Set([1, 2]);
+  setup.temas = new Set(TEMAS_18.map((t) => t.tema));
+  setup.revealGender = true;
+  startGame();
+});
+
+async function startGame() {
   const w = roomWatcher;
   if (!w || !isHost()) return;
-  if (!lobbyReadiness(w).allReady) {
-    showToast("Todavía hay jugadores que no están listos", "⏳");
+  if (!lobbyReadiness(w).canStart) {
+    showToast("Se necesitan al menos 2 personas", "👥");
     return;
   }
   const dyn = getDynamic(selectedDynamicKey);
@@ -1328,12 +1383,13 @@ $("btn-start-dynamic").addEventListener("click", async () => {
     fields.phase = "write";
   }
 
+  fields.nextGame = null;
   try {
     await updateDoc(roomRef(w.code), fields);
   } catch (err) {
     showToast("No se pudo empezar: " + friendlyError(err), "❌");
   }
-});
+}
 
 // ==========================================
 // 5. MOTOR DE DINÁMICAS EN SALA
@@ -2273,7 +2329,7 @@ function renderPersona(w) {
     const submitted = !!load("session", submissionKey(room));
     const { done, expected } = personaDoneCount(w);
     if (!me) {
-      ensurePanel(`persona|${room.gameId}|spectator`, `<div class="waiting"><div class="waiting-icon">👀</div><p>Entraste cuando la dinámica ya había empezado. Podrás ver la ronda cuando comience.</p></div>`);
+      ensurePanel(`persona|${room.gameId}|spectator`, `<div class="waiting"><div class="waiting-icon">👀</div><p>Entraste cuando el juego ya había empezado. Podrás jugar en la próxima ronda.</p></div>`);
     } else if (submitted) {
       ensurePanel(`persona|${room.gameId}|write|done`, `<div class="room-box inner"><h3 class="panel-title">${v.icon} ${v.title}</h3><div class="voted-status">✓ Enviado. Esperando al resto...</div></div>`);
     } else {
@@ -2465,7 +2521,7 @@ function renderEndPanel(w, title, restartAction) {
   $("game-host-bar").innerHTML = isHost()
     ? hostButtons([
         { action: restartAction, label: "🔁 Otra ronda", cls: "btn-purple" },
-        { action: "end-game", label: "← Volver a la sala", cls: "btn-secondary" },
+        { action: "end-game", label: "Elegir otro juego", cls: "btn-secondary" },
       ])
     : nonHostNote("Esperando al anfitrión...");
 }
@@ -2620,7 +2676,7 @@ $("game-panel").addEventListener("keydown", (e) => {
 
 $("btn-game-back").addEventListener("click", () => {
   if (isHost()) {
-    if (confirm("¿Terminar la dinámica y volver todos a la sala?")) HOST_ACTIONS["end-game"]();
+    if (confirm(tr("¿Terminar este juego? Podrás elegir otro al tiro.", "¿Terminar este juego? Podrás elegir otro enseguida."))) HOST_ACTIONS["end-game"]();
   } else if (confirm("¿Salir de la sala?")) {
     leaveRoom();
   }

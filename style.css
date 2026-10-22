@@ -2212,3 +2212,90 @@ a.brand { text-decoration: none; color: inherit; }
   justify-content: center;
   order: 3;
 }
+
+/* ========== Empezar rápido y menú de juegos ========== */
+.quick-start {
+  flex-direction: column;
+  gap: 2px;
+  min-height: 64px;
+  margin-bottom: 10px;
+}
+
+.quick-main { font-size: 17px; font-weight: 800; }
+.quick-sub { font-size: 13px; font-weight: 600; opacity: 0.8; }
+
+.dynamics-featured,
+.dynamics-more {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.dynamics-featured .dynamic-card-radio { border-color: var(--line-strong); }
+
+.more-games,
+.step2-fold {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.more-games > summary,
+.step2-fold > summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.more-games > summary::-webkit-details-marker,
+.step2-fold > summary::-webkit-details-marker { display: none; }
+
+.more-games > summary::after,
+.step2-fold > summary::after {
+  content: "▾";
+  color: var(--ink-dim);
+  transition: transform 0.2s var(--ease-out);
+}
+
+.more-games[open] > summary::after,
+.step2-fold[open] > summary::after { transform: rotate(180deg); }
+
+.more-games > .dynamics-more,
+.step2-fold > .type-toggle-list { padding: 0 10px 10px; }
+
+.step2-fold { margin: 14px 0 0; }
+
+/* Próximo juego que ven los invitados en la sala de espera */
+.next-game {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  max-width: 420px;
+  margin: 12px auto 0;
+  padding: 12px 14px;
+  background: var(--hielo-soft);
+  border: 1.5px solid var(--hielo-line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+}
+
+.next-game strong { display: block; font-size: 16px; }
+.next-game small { color: var(--ink-muted); font-size: 13px; }
+
+/* El botón de empezar queda siempre al alcance del pulgar mientras se ajusta el juego */
+#btn-start-dynamic {
+  position: sticky;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 5;
+  margin-top: 16px;
+  box-shadow: 0 10px 24px -8px oklch(0 0 0 / 0.8);
+}

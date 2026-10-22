@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>RompeHielos 🧊 | Citas, carretes, dilemas y salas en vivo</title>
-  <meta name="description" content="Preguntas para romper el hielo en citas, juntas con amigos, carretes y dinámicas de trabajo. Juega en 1 celular o en salas en vivo con varios celulares.">
+  <meta name="description" content="Preguntas para romper el hielo en citas, juntas con amigos y carretes. Voten en secreto desde cada celular y vean los resultados a la vez.">
   <meta name="theme-color" content="#11161c">
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="style.css?v=20261022073002">
+  <link rel="stylesheet" href="style.css?v=20261022073238">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
     <section id="view-home" class="view-screen active">
       <div class="hero">
         <h1 class="hero-title">Preguntas que <span class="text-gradient">rompen el hielo</span></h1>
-        <p class="hero-sub">Para citas, carretes, dilemas absurdos o la dinámica de la pega. Elige cómo jugar:</p>
+        <p class="hero-sub">Preguntas que nadie se atreve a responder en voz alta: cada uno vota en secreto desde su celular y los resultados se revelan a la vez.</p>
 
         <div class="mode-selection-grid">
           <div class="mode-card card-solo" id="card-start-solo" role="button" tabindex="0">
@@ -46,8 +46,8 @@
 
           <div class="mode-card card-multi" id="card-start-multi" role="button" tabindex="0">
             <span class="card-rank" aria-hidden="true">3+</span>
-            <h2>Salas multicelular</h2>
-            <p>Para grupos: cada uno se une desde su celular y vota en secreto. ¿Quién es más probable?, confesiones anónimas, dilemas y más.</p>
+            <h2>Jugar en grupo</h2>
+            <p>Cada uno entra desde su celular con un código y vota en secreto: secretos +18, ¿quién es más probable?, confesiones y más.</p>
             <div class="mode-footer">
               <span>3 o más personas</span>
               <strong>Crear o unirse →</strong>
@@ -97,7 +97,7 @@
           <button type="button" class="filter-chip" data-subcat="open">Abiertas <span id="count-subcat-open">0</span></button>
         </div>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-table-mode" title="Girar la tarjeta 180° hacia quien le toca">
-          <span id="lbl-table-mode-text">Giro: sí</span>
+          <span id="lbl-table-mode-text">Girar carta: sí</span>
         </button>
       </div>
 
@@ -146,7 +146,7 @@
     <section id="view-lobby" class="view-screen">
       <div class="game-header">
         <button type="button" class="back-btn" id="btn-back-lobby">← Inicio</button>
-        <span class="turn-pill pill-purple">Salas multicelular</span>
+        <span class="turn-pill pill-purple">Jugar en grupo</span>
       </div>
 
       <!-- Crear o unirse -->
@@ -219,13 +219,18 @@
 
         <!-- Controles del anfitrión -->
         <div id="host-lobby-actions" class="section-block" hidden>
-          <button type="button" class="btn btn-purple btn-block" id="btn-open-setup">Elegir juego →</button>
+          <button type="button" class="btn btn-primary btn-block quick-start" id="btn-quick-start">
+            <span class="quick-main" id="lbl-quick-start">Jugar Secretos +18</span>
+            <span class="quick-sub">Niveles 1 y 2 · votan en secreto y se revela a la vez</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-block" id="btn-open-setup">Elegir otro juego</button>
           <p class="muted-small center" id="lbl-host-lobby-hint"></p>
         </div>
 
         <div id="non-host-wait-msg" class="waiting" hidden>
           <div class="waiting-icon">⏳</div>
-          <p>Marca que estás listo y espera a que el anfitrión elija la dinámica.</p>
+          <p id="lbl-guest-wait">El anfitrión está eligiendo el juego.</p>
+          <div class="next-game" id="guest-next-game" hidden></div>
         </div>
 
         <button type="button" class="btn btn-ghost btn-block" id="btn-leave-room">Salir de la sala</button>
@@ -240,12 +245,11 @@
       </div>
       <div class="room-box" id="host-game-controls">
           <div class="players-pill-list setup-players" id="setup-players-list"></div>
-          <!-- Paso 1: qué dinámica -->
+          <!-- Paso 1: qué juego -->
           <div id="host-step-1">
-            <h3 class="block-title">Paso 1 · Elige la dinámica</h3>
-            <p class="panel-desc left">Todos los celulares de la sala cambian a la dinámica al mismo tiempo.</p>
+            <h3 class="block-title">¿A qué jugamos?</h3>
+            <p class="panel-desc left">Toca un juego: todos los celulares de la sala cambian a la vez.</p>
             <div class="dynamics-grid" id="dynamics-grid"></div>
-            <button type="button" class="btn btn-purple btn-block" id="btn-host-next-step">Siguiente →</button>
           </div>
 
           <!-- Paso 2: cómo jugarla -->
@@ -255,7 +259,7 @@
               <div class="selected-dynamic-info" id="selected-dynamic-summary"></div>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-host-prev-step">Cambiar</button>
             </div>
-            <h3 class="block-title">Paso 2 · ¿Cómo quieren jugar?</h3>
+            <h3 class="block-title">Ajustes</h3>
 
             <div id="step2-content"></div>
 
@@ -277,7 +281,7 @@
           <span class="invite-code" id="lbl-game-room-code">-----</span>
           <span class="invite-label">Invitar</span>
         </button>
-        <span class="turn-pill pill-purple game-mode-pill" id="game-mode-pill">Dinámica</span>
+        <span class="turn-pill pill-purple game-mode-pill" id="game-mode-pill">Juego</span>
       </div>
       <div class="game-dynamic-box">
         <div class="eyebrow center" id="game-status"></div>
@@ -454,7 +458,7 @@
     <div class="footer-links">
       <button type="button" class="footer-link-btn" id="footer-btn-solo">1 celular en la mesa</button>
       <span>•</span>
-      <button type="button" class="footer-link-btn" id="footer-btn-multi">Salas multicelular</button>
+      <button type="button" class="footer-link-btn" id="footer-btn-multi">Jugar en grupo</button>
       <span>•</span>
       <button type="button" class="footer-link-btn" id="footer-btn-tv">Modo TV</button>
     </div>
@@ -468,6 +472,6 @@
     <div>RompeHielos · para que la conversación no muera</div>
   </footer>
 
-  <script type="module" src="app.js?v=20261022073002"></script>
+  <script type="module" src="app.js?v=20261022073238"></script>
 </body>
 </html>
