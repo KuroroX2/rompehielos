@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022105502";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022105502";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022105502";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022105502";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022105502";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022105502";
+import { firebaseConfig } from "./firebase-config.js?v=20261022131223";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022131223";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022131223";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022131223";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022131223";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022131223";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -1388,8 +1388,6 @@ function renderLobby(w) {
   $("lbl-host-lobby-hint").textContent = !canPlay
     ? "Invita al menos a 1 persona más para empezar."
     : readyCount === guests.length ? "Todos listos." : `${readyCount} de ${guests.length} listos · puedes empezar igual.`;
-  $("btn-quick-start").disabled = !canPlay;
-  $("lbl-quick-start").textContent = tr("¡Jugar Secretos +18 al tiro!", "Jugar Secretos +18 ahora");
   $("setup-room-pill").textContent = `Sala ${w.code} · ${active.length} ${active.length === 1 ? "persona" : "personas"}`;
 
   $("lbl-ready-status").textContent =
@@ -1504,15 +1502,6 @@ function pickSpeaker(players, exceptId) {
 }
 
 $("btn-start-dynamic").addEventListener("click", () => startGame());
-
-// "Jugar al tiro": Secretos +18 con niveles 1 y 2 y todos los temas, sin pasar por los ajustes
-$("btn-quick-start").addEventListener("click", () => {
-  selectedDynamicKey = "secretos_intimos";
-  setup.levels = new Set([1, 2]);
-  setup.temas = new Set(TEMAS_18.map((t) => t.tema));
-  setup.revealGender = true;
-  startGame();
-});
 
 async function startGame() {
   const w = roomWatcher;

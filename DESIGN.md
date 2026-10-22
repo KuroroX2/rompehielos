@@ -43,7 +43,7 @@ Mazos (`[data-deck]`): citas 1 celeste claro, citas 2 agua, citas 3 azul profund
 - **Revelación:** la frase con gracia del resultado va primero como titular grande (`.reveal-headline`, Young Serif); los números y barras llegan después, escalonados. La nota de privacidad va abajo y chica.
 - **Preguntas abiertas:** ruleta de nombres (~1,8 s) que elige quién responde; después el resto vota la respuesta en secreto (Buenísima / Me hizo reír / No me la creo / Aburrida) y se revela un veredicto.
 - **Resumen de la partida:** al terminar un juego de votación se muestra lo más confesado, lo que más ganas da, la persona más votada y la mejor respuesta (solo datos agregados).
-- **Empezar rápido:** el anfitrión tiene "Jugar Secretos +18" directo en la sala; "listo" es un aviso, no un requisito.
+- **Empezar rápido:** "listo" es un aviso, no un requisito; tocar un juego lleva directo a sus ajustes.
 - **Animaciones:** solo transform. Nunca se anima la opacidad desde 0, para que el contenido se vea aunque la animación no corra.
 
 ## Idioma
