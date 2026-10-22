@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022131223";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022131223";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022131223";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022131223";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022131223";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022131223";
+import { firebaseConfig } from "./firebase-config.js?v=20261022191642";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022191642";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022191642";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022191642";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022191642";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022191642";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -1957,7 +1957,7 @@ function renderPreguntas(w) {
       <span class="type-badge">${questionTypeLabel(info)}</span>
       <p class="question-hero-text">${escapeHtml(questionText(question))}</p>
     </div>
-    ${privacy && room.phase === "vote" ? `<div class="notice notice-safe">${privacy}</div>` : ""}
+    ${privacy && room.phase === "vote" && (room.revealed || 0) < 2 ? `<div class="notice notice-safe">${privacy}</div>` : ""}
     <div id="g-vote-area"></div>
     <div class="progress-line" id="g-progress"></div>
     <div id="g-results"></div>`
@@ -2242,7 +2242,7 @@ function renderConfesiones(w) {
     const everyoneSent = allDone(w.subs.length, players.length);
     $("g-progress").textContent = `✍️ ${w.subs.length} de ${players.length} ya enviaron`;
     $("game-host-bar").innerHTML = host
-      ? hostButtons([{ action: "conf-start-vote", label: everyoneSent ? "🗳️ Empezar votación" : `⏳ Esperando confesiones (${w.subs.length} de ${players.length})`, disabled: !everyoneSent }])
+      ? hostButtons([w.subs.length ? waitingButton(everyoneSent, w.subs.length, players.length, "conf-start-vote", "🗳️ Empezar votación", room) : { action: "conf-start-vote", label: "⏳ Esperando la primera confesión", disabled: true }])
       : nonHostNote("Cuando todos envíen, el anfitrión empieza la votación.");
     return;
   }
@@ -2358,7 +2358,7 @@ function renderTres(w) {
     const everyoneWrote = allDone(w.subs.length, players.length);
     $("g-progress").textContent = `✍️ ${w.subs.length} de ${players.length} están listos`;
     $("game-host-bar").innerHTML = host
-      ? hostButtons([{ action: "tres-start-vote", label: everyoneWrote ? "🎯 Empezar a adivinar" : `⏳ Esperando a todos (${w.subs.length} de ${players.length})`, disabled: !everyoneWrote }])
+      ? hostButtons([w.subs.length ? waitingButton(everyoneWrote, w.subs.length, players.length, "tres-start-vote", "🎯 Empezar a adivinar", room) : { action: "tres-start-vote", label: "⏳ Esperando al primero", disabled: true }])
       : nonHostNote("Cuando todos estén listos, el anfitrión empieza.");
     return;
   }
@@ -2717,7 +2717,7 @@ function renderPersona(w) {
     }
     const everyone = allDone(done, expected);
     $("game-host-bar").innerHTML = host
-      ? hostButtons([{ action: "persona-start-reveal", label: everyone ? "▶️ Comenzar ronda" : `⏳ Esperando a todos (${done} de ${expected})`, cls: "btn-purple", disabled: !everyone }])
+      ? hostButtons([done ? waitingButton(everyone, done, expected, "persona-start-reveal", "▶️ Comenzar ronda", room) : { action: "persona-start-reveal", label: "⏳ Esperando al primero", disabled: true }])
       : nonHostNote("Cuando todos finalicen, el anfitrión comienza la ronda.");
     return;
   }
@@ -3018,7 +3018,7 @@ const HOST_ACTIONS = {
   "persona-start-reveal": () => {
     const w = roomWatcher;
     const { done, expected } = personaDoneCount(w);
-    if (!allDone(done, expected)) return;
+    if (done === 0 || !doneOrForced(done, expected)) return;
     return hostUpdate({ phase: "reveal", order: shuffleArray(w.room.participants.map((p) => p.id)), pos: 0, shown: 0, hidden: [] });
   },
 

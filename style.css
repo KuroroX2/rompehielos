@@ -103,7 +103,8 @@ html, body {
   background-color: var(--bg);
   color: var(--ink);
   font-family: var(--font-body);
-  overflow-x: hidden;
+  /* clip (no hidden): hidden convierte al body en contenedor de scroll y rompe position: sticky */
+  overflow-x: clip;
 }
 
 body { line-height: 1.45; }
