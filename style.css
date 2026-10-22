@@ -79,7 +79,6 @@
 [data-deck="secretos_intimos"]      { --card: oklch(0.50 0.19 25);  --card-ink: oklch(0.97 0.01 30); }
 [data-deck="confesiones"]           { --card: oklch(0.76 0.10 295); --card-ink: oklch(0.21 0.05 295); }
 [data-deck="salas"]                 { --card: var(--hielo);           --card-ink: var(--hielo-ink); }
-[data-deck="tv"]                    { --card: oklch(0.85 0.09 188); --card-ink: oklch(0.22 0.05 200); }
 
 /* +18: el nivel manda sobre el mazo (1 verde → 5 rojo intenso; siempre con número y nombre) */
 .lvl-1 { --card: oklch(0.80 0.14 150); --card-ink: oklch(0.21 0.04 150); --lvl: var(--card); }
@@ -1648,16 +1647,6 @@ select.input-field { cursor: pointer; }
   display: block;
 }
 
-.tv-category-bar {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.tv-category-bar .eyebrow { margin: 0 4px 0 0; }
-
 .tv-main-stage {
   flex: 1;
   display: flex;
@@ -1669,7 +1658,6 @@ select.input-field { cursor: pointer; }
 }
 
 #tv-stage-room,
-#tv-stage-questions,
 #tv-room-live {
   width: 100%;
   max-width: 950px;
@@ -1686,20 +1674,6 @@ select.input-field { cursor: pointer; }
   margin: 0 auto 24px;
   text-wrap: balance;
 }
-
-/* Preguntas en pantalla gigante: una carta grande */
-#tv-stage-questions {
-  position: relative;
-  background: var(--card);
-  color: var(--card-ink);
-  border-radius: 28px;
-  padding: 36px 28px 28px;
-  box-shadow: var(--shadow-card);
-}
-
-#tv-stage-questions .tv-giant-text { color: var(--card-ink); }
-#tv-stage-questions .type-badge { background: color-mix(in oklch, var(--card-ink) 12%, transparent); color: var(--card-ink) !important; }
-#tv-stage-questions .muted-small { color: color-mix(in oklch, var(--card-ink) 75%, var(--card)); }
 
 .tv-results {
   max-width: 760px;

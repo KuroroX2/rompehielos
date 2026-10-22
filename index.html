@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="style.css?v=20261021213812">
+  <link rel="stylesheet" href="style.css?v=20261021214547">
 </head>
 <body>
 
@@ -57,7 +57,7 @@
           <div class="mode-card card-tv" id="card-start-tv" role="button" tabindex="0">
             <span class="card-rank" aria-hidden="true">TV</span>
             <h2>Modo TV y proyector</h2>
-            <p>Para eventos: proyecta una sala en vivo con su código QR y resultados, o pasa preguntas en pantalla gigante.</p>
+            <p>Para eventos: proyecta una sala en vivo en la TV, con su código QR para unirse y los resultados de cada pregunta.</p>
             <div class="mode-footer">
               <span>Pantalla grande</span>
               <strong>Proyectar →</strong>
@@ -305,11 +305,6 @@
           <button type="button" class="btn btn-secondary btn-sm" id="btn-close-tv">Salir</button>
         </div>
 
-        <div class="tv-category-bar" id="tv-category-bar">
-          <span class="eyebrow">Proyectar:</span>
-          <button type="button" class="filter-chip active" data-tvcat="sala_sync">Sala en vivo</button>
-        </div>
-
         <div class="tv-main-stage">
           <div id="tv-stage-room">
             <div id="tv-room-connect" class="tv-connect">
@@ -328,16 +323,6 @@
             </div>
           </div>
 
-          <div id="tv-stage-questions" hidden>
-            <span class="type-badge big" id="tv-q-cat-badge"></span>
-            <h2 class="tv-giant-text" id="tv-giant-q-text">Cargando pregunta...</h2>
-            <div class="row-center">
-              <button type="button" class="btn btn-secondary" id="btn-tv-prev-q">← Anterior</button>
-              <button type="button" class="btn btn-primary" id="btn-tv-next-q">Siguiente →</button>
-              <button type="button" class="btn btn-secondary" id="btn-tv-shuffle">Barajar</button>
-            </div>
-            <p class="muted-small">Barra espaciadora o → para avanzar, ← para volver.</p>
-          </div>
         </div>
       </div>
     </section>
@@ -482,6 +467,6 @@
     <div>RompeHielos · para que la conversación no muera</div>
   </footer>
 
-  <script type="module" src="app.js?v=20261021213812"></script>
+  <script type="module" src="app.js?v=20261021214547"></script>
 </body>
 </html>

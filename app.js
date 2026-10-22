@@ -1,9 +1,9 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261021213812";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261021213812";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261021213812";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261021213812";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261021213812";
+import { firebaseConfig } from "./firebase-config.js?v=20261021214547";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261021214547";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261021214547";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261021214547";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261021214547";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -1198,6 +1198,13 @@ $("btn-toggle-ready").addEventListener("click", async () => {
 
 function onRoomUpdate(w) {
   if (!w.room) return;
+  if (w.room.state === "expired" && !leavingRoom) {
+    const code = w.code;
+    resetRoomUi();
+    switchView("view-lobby");
+    showToast(`La sala ${code} se cerró`, "👋");
+    return;
+  }
   const meInRoom = w.players.some((p) => p.id === profile.playerId);
   if (meInRoom) w.sawMe = true;
   if (!leavingRoom && (wasBanned(w.room) || (w.sawMe && !meInRoom))) {
@@ -2609,69 +2616,8 @@ $("btn-game-back").addEventListener("click", () => {
 // ==========================================
 // 6. MODO TV / PROYECTOR
 // ==========================================
-const TV_CATEGORIES = ["dilemas_absurdos", "quien_es_mas_probable", "amigos_fiesta", "empresas_trabajo", "citas_nivel1"];
-const tv = { source: "sala_sync", deck: [], index: 0, watcher: null };
-
-function setupTvCategoryBar() {
-  const bar = $("tv-category-bar");
-  TV_CATEGORIES.map(getCategory).filter(Boolean).forEach((cat) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "filter-chip";
-    btn.dataset.tvcat = cat.id;
-    btn.textContent = `${cat.icono} ${cat.titulo}`;
-    bar.appendChild(btn);
-  });
-  bar.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-tvcat]");
-    if (!btn) return;
-    bar.querySelectorAll("[data-tvcat]").forEach((b) => b.classList.toggle("active", b === btn));
-    setTvSource(btn.dataset.tvcat);
-  });
-}
-
-function setTvSource(sourceId) {
-  tv.source = sourceId;
-  $("tv-stage-room").hidden = sourceId !== "sala_sync";
-  $("tv-stage-questions").hidden = sourceId === "sala_sync";
-  if (sourceId !== "sala_sync") {
-    tv.deck = shuffleArray(getCategory(sourceId).preguntas);
-    tv.index = 0;
-    renderTvQuestion();
-  }
-}
-
-function renderTvQuestion() {
-  const cat = getCategory(tv.source);
-  if (!cat || tv.deck.length === 0) return;
-  tv.index = ((tv.index % tv.deck.length) + tv.deck.length) % tv.deck.length;
-  $("tv-q-cat-badge").textContent = `${cat.icono} ${cat.titulo} · ${tv.index + 1} de ${tv.deck.length}`;
-  $("tv-stage-questions").dataset.deck = cat.id;
-  $("tv-giant-q-text").textContent = questionText(tv.deck[tv.index]);
-}
-
-$("btn-tv-next-q").addEventListener("click", () => { tv.index++; renderTvQuestion(); });
-$("btn-tv-prev-q").addEventListener("click", () => { tv.index--; renderTvQuestion(); });
-$("btn-tv-shuffle").addEventListener("click", () => {
-  tv.deck = shuffleArray(tv.deck);
-  tv.index = 0;
-  renderTvQuestion();
-  showToast("Preguntas barajadas", "🔀");
-});
-
-window.addEventListener("keydown", (e) => {
-  if (activeViewId() !== "view-tv" || tv.source === "sala_sync") return;
-  if (e.target.matches("input, textarea")) return;
-  if (e.code === "Space" || e.code === "ArrowRight") {
-    e.preventDefault();
-    tv.index++;
-    renderTvQuestion();
-  } else if (e.code === "ArrowLeft") {
-    e.preventDefault();
-    tv.index--;
-    renderTvQuestion();
-  }
-});
+// La TV solo proyecta una sala en vivo: código + QR para unirse y lo que pasa en la partida
+const tv = { watcher: null };
 
 function tvWatchRoom(code) {
   tv.watcher?.stop();
@@ -2699,6 +2645,12 @@ function tvDisconnect() {
 function renderTvRoom(w) {
   const room = w.room;
   if (!room) return;
+  if (room.state === "expired") {
+    showToast(`La sala ${w.code} terminó`, "👋");
+    tvDisconnect();
+    $("input-tv-room-code").value = "";
+    return;
+  }
   const players = activePlayers(w.players);
   // En la sala de espera se ve quién está listo; durante la dinámica, quién ya participó
   $("tv-players-list").innerHTML = room.state === "playing" && currentStep(room) ? playerStatusHtml(w) : playerChipsHtml(players, room.hostId, room.state === "playing" ? null : room);
@@ -2808,9 +2760,6 @@ $("input-tv-room-code").addEventListener("keydown", (e) => {
 
 function openTv(code) {
   switchView("view-tv");
-  const chip = document.querySelector('#tv-category-bar [data-tvcat="sala_sync"]');
-  document.querySelectorAll("#tv-category-bar [data-tvcat]").forEach((b) => b.classList.toggle("active", b === chip));
-  setTvSource("sala_sync");
   if (code) tvWatchRoom(code);
 }
 
@@ -3160,7 +3109,6 @@ setupProfilePickers();
 renderDynamicsGrid();
 renderHostStep();
 renderSoloCategories();
-setupTvCategoryBar();
 subscribeToBank();
 
 // ---------- Entrada: mayoría de edad y términos ----------
