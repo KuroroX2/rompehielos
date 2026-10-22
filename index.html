@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="style.css?v=20261022085629">
+  <link rel="stylesheet" href="style.css?v=20261022085741">
 </head>
 <body>
 
@@ -186,24 +186,24 @@
         <input type="text" class="input-field" id="input-player-name" placeholder="Ej: Camilo, Vale, Nacho..." maxlength="25" autocomplete="nickname">
 
         <span class="field-label">Tu avatar</span>
-        <div class="avatar-selector" id="avatar-picker">
-          <button type="button" class="avatar-opt" data-avatar="🦊">🦊</button>
-          <button type="button" class="avatar-opt" data-avatar="🧊">🧊</button>
-          <button type="button" class="avatar-opt" data-avatar="🚀">🚀</button>
-          <button type="button" class="avatar-opt" data-avatar="🎭">🎭</button>
-          <button type="button" class="avatar-opt" data-avatar="🦄">🦄</button>
-          <button type="button" class="avatar-opt" data-avatar="⚡">⚡</button>
-          <button type="button" class="avatar-opt" data-avatar="🍕">🍕</button>
-          <button type="button" class="avatar-opt" data-avatar="👑">👑</button>
-          <button type="button" class="avatar-opt" data-avatar="👻">👻</button>
-          <button type="button" class="avatar-opt" data-avatar="🥑">🥑</button>
+        <div class="avatar-selector" id="avatar-picker" role="group" aria-label="Avatar">
+          <button type="button" class="avatar-opt" data-avatar="🦊" aria-label="Avatar zorro" aria-pressed="false">🦊</button>
+          <button type="button" class="avatar-opt" data-avatar="🧊" aria-label="Avatar hielo" aria-pressed="false">🧊</button>
+          <button type="button" class="avatar-opt" data-avatar="🚀" aria-label="Avatar cohete" aria-pressed="false">🚀</button>
+          <button type="button" class="avatar-opt" data-avatar="🎭" aria-label="Avatar máscaras" aria-pressed="false">🎭</button>
+          <button type="button" class="avatar-opt" data-avatar="🦄" aria-label="Avatar unicornio" aria-pressed="false">🦄</button>
+          <button type="button" class="avatar-opt" data-avatar="⚡" aria-label="Avatar rayo" aria-pressed="false">⚡</button>
+          <button type="button" class="avatar-opt" data-avatar="🍕" aria-label="Avatar pizza" aria-pressed="false">🍕</button>
+          <button type="button" class="avatar-opt" data-avatar="👑" aria-label="Avatar corona" aria-pressed="false">👑</button>
+          <button type="button" class="avatar-opt" data-avatar="👻" aria-label="Avatar fantasma" aria-pressed="false">👻</button>
+          <button type="button" class="avatar-opt" data-avatar="🥑" aria-label="Avatar palta" aria-pressed="false">🥑</button>
         </div>
 
         <span class="field-label">Género (solo para las estadísticas anónimas del grupo)</span>
-        <div class="segmented" id="gender-picker">
-          <button type="button" class="segmented-opt" data-gender="hombre">👨 Hombre</button>
-          <button type="button" class="segmented-opt" data-gender="mujer">👩 Mujer</button>
-          <button type="button" class="segmented-opt" data-gender="otro">🌈 Otro</button>
+        <div class="segmented" id="gender-picker" role="group" aria-label="Género">
+          <button type="button" class="segmented-opt" data-gender="hombre" aria-pressed="false">👨 Hombre</button>
+          <button type="button" class="segmented-opt" data-gender="mujer" aria-pressed="false">👩 Mujer</button>
+          <button type="button" class="segmented-opt" data-gender="otro" aria-pressed="false">🌈 Otro</button>
         </div>
 
         <div class="two-col" id="lobby-main-actions">
@@ -219,6 +219,7 @@
 
       <!-- Dentro de la sala -->
       <div class="room-box" id="lobby-active-room-box" hidden>
+        <h2 class="sr-only">Sala de espera</h2>
         <div class="center">
           <span class="eyebrow">Código de la sala</span>
           <button type="button" class="room-code-badge" id="btn-copy-room-code" title="Copiar enlace">
@@ -268,6 +269,7 @@
         <span class="turn-pill pill-purple" id="setup-room-pill">Sala</span>
       </div>
       <div class="room-box" id="host-game-controls">
+          <h2 class="sr-only">Elegir juego</h2>
           <div class="players-pill-list setup-players" id="setup-players-list"></div>
           <!-- Paso 1: qué juego -->
           <div id="host-step-1">
@@ -496,6 +498,6 @@
     <div>RompeHielos · para que la conversación no muera</div>
   </footer>
 
-  <script type="module" src="app.js?v=20261022085629"></script>
+  <script type="module" src="app.js?v=20261022085741"></script>
 </body>
 </html>

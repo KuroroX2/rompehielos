@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022085629";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022085629";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022085629";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022085629";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022085629";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022085629";
+import { firebaseConfig } from "./firebase-config.js?v=20261022085741";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022085741";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022085741";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022085741";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022085741";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022085741";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -608,12 +608,17 @@ function createRoomWatcher(code, onUpdate, onMissing) {
 function setupProfilePickers() {
   $("input-player-name").value = profile.name;
 
+  // La selección se marca con clase (visual) y aria-pressed (lectores de pantalla)
+  const markPicked = (list, picked) => list.forEach((o) => {
+    o.classList.toggle("selected", o === picked);
+    o.setAttribute("aria-pressed", String(o === picked));
+  });
+
   const avatars = document.querySelectorAll(".avatar-opt");
   avatars.forEach((opt) => {
-    opt.classList.toggle("selected", opt.dataset.avatar === profile.avatar);
+    if (opt.dataset.avatar === profile.avatar) markPicked(avatars, opt);
     opt.addEventListener("click", () => {
-      avatars.forEach((o) => o.classList.remove("selected"));
-      opt.classList.add("selected");
+      markPicked(avatars, opt);
       profile.avatar = opt.dataset.avatar;
       store("local", "rh_player_avatar", profile.avatar);
     });
@@ -621,10 +626,9 @@ function setupProfilePickers() {
 
   const genders = document.querySelectorAll("#gender-picker .segmented-opt");
   genders.forEach((opt) => {
-    opt.classList.toggle("selected", opt.dataset.gender === profile.gender);
+    if (opt.dataset.gender === profile.gender) markPicked(genders, opt);
     opt.addEventListener("click", () => {
-      genders.forEach((o) => o.classList.remove("selected"));
-      opt.classList.add("selected");
+      markPicked(genders, opt);
       profile.gender = opt.dataset.gender;
       store("local", "rh_player_gender", profile.gender);
     });
@@ -791,6 +795,18 @@ $("btn-toggle-join-mode").addEventListener("click", () => {
   if (!container.hidden) $("input-room-code").focus();
 });
 
+// ¿Alguien conectado (que no soy yo) ya usa este nombre en la sala?
+async function nameTakenInRoom(code, name) {
+  const clean = (name || "").trim().toLowerCase();
+  if (!clean) return false;
+  const snap = await getDocs(collection(db, "salas", code, "players"));
+  const players = snap.docs.map((d) => {
+    const data = d.data({ serverTimestamps: "estimate" });
+    return { id: d.id, name: data.name || "", lastSeen: toMillis(data.lastSeen) };
+  });
+  return activePlayers(players).some((p) => p.id !== profile.playerId && p.name.trim().toLowerCase() === clean);
+}
+
 async function joinRoom(rawCode, { silent = false } = {}) {
   const code = (rawCode || "").trim().toUpperCase();
   if (code.length < 4) {
@@ -809,6 +825,11 @@ async function joinRoom(rawCode, { silent = false } = {}) {
     }
     if (wasBanned(snap.data())) {
       showToast(`El anfitrión te baneó de la sala ${code}: no puedes volver a entrar`, "⛔");
+      return false;
+    }
+    if (!silent && (await nameTakenInRoom(code, profile.name))) {
+      showToast(`Ya hay alguien llamado "${profile.name}" en la sala. Usa otro nombre o agrega una inicial.`, "✋");
+      $("input-player-name").focus();
       return false;
     }
     await writePlayerDoc(code);
