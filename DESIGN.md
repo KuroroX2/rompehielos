@@ -37,3 +37,15 @@ Mazos (`[data-deck]`): citas 1 celeste claro, citas 2 agua, citas 3 azul profund
 - Botones: altura mínima 48px (44px los pequeños), radio 14px.
 - Movimiento: ease-out exponencial (`cubic-bezier(0.25, 1, 0.5, 1)`), sin rebotes. La carta "se reparte" al cambiar de pregunta (desliza y se endereza). Con `prefers-reduced-motion` todo pasa a un fundido o instantáneo.
 - Emojis: solo como "palo" de la carta (ícono de temática) y en estados con significado; nunca en botones de acción.
+
+## Momentos del juego
+
+- **Revelación:** la frase con gracia del resultado va primero como titular grande (`.reveal-headline`, Young Serif); los números y barras llegan después, escalonados. La nota de privacidad va abajo y chica.
+- **Preguntas abiertas:** ruleta de nombres (~1,8 s) que elige quién responde; después el resto vota la respuesta en secreto (Buenísima / Me hizo reír / No me la creo / Aburrida) y se revela un veredicto.
+- **Resumen de la partida:** al terminar un juego de votación se muestra lo más confesado, lo que más ganas da, la persona más votada y la mejor respuesta (solo datos agregados).
+- **Empezar rápido:** el anfitrión tiene "Jugar Secretos +18" directo en la sala; "listo" es un aviso, no un requisito.
+- **Animaciones:** solo transform. Nunca se anima la opacidad desde 0, para que el contenido se vea aunque la animación no corra.
+
+## Idioma
+
+Jerga chilena solo en Chile (zona horaria o `es-CL`); en el resto, español neutro vía `locale.js`. Cambio manual en el pie de página.

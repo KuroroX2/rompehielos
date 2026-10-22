@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022085741";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022085741";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022085741";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022085741";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022085741";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022085741";
+import { firebaseConfig } from "./firebase-config.js?v=20261022085828";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022085828";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022085828";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022085828";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022085828";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022085828";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -341,7 +341,7 @@ function renderPareja() {
   const info = classifyGroupQuestion(q, "secretos_intimos");
   const nivel = NIVELES_18.find((n) => n.lvl === q.lvl);
   const order = [pareja.first, 1 - pareja.first];
-  $("pareja-status").textContent = `Pregunta ${pareja.index + 1} de ${pareja.deck.length}`;
+  $("pareja-status").textContent = `Pregunta ${pareja.index + 1}`;
   $("pareja-card").innerHTML = `
     <div class="question-hero ${nivel ? `lvl-${nivel.lvl}` : ""}" data-deck="secretos_intimos">
       ${nivel ? `<span class="level-badge">${nivel.icon} ${nivel.title}</span>` : ""}
@@ -1893,10 +1893,11 @@ function renderPreguntas(w) {
   const revealGender = !!room.settings?.revealGender;
   const nivel = typeof question === "object" && question.lvl ? NIVELES_18.find((n) => n.lvl === question.lvl) : null;
 
-  $("game-status").textContent = `${cat?.titulo || ""} · Pregunta ${room.pos + 1} de ${room.deck.length}${nivel ? ` · ${nivel.icon} ${nivel.title}` : ""}`;
+  // El juego ya está arriba y el nivel en la carta: aquí solo el avance
+  $("game-status").textContent = `Pregunta ${room.round + 1}`;
 
   if (room.phase === "summary") {
-    $("game-status").textContent = `${cat?.titulo || ""} · Resumen`;
+    $("game-status").textContent = "Resumen de la partida";
     ensurePanel(`summary|${room.gameId}|${(room.highlights || []).length}`, summaryHtml(room.highlights || [], room.round + 1));
     $("game-host-bar").innerHTML = isHost()
       ? hostButtons([
@@ -2184,7 +2185,7 @@ function renderConfesiones(w) {
   const reveal = room.settings?.revealAuthor !== false;
 
   if (room.phase === "write") {
-    $("game-status").textContent = "Paso 1 · Escribe tu confesión";
+    $("game-status").textContent = "Escribe tu confesión";
     const submitted = !!load("session", submissionKey(room));
     ensurePanel(
       `conf|${room.gameId}|write|${submitted}`,
@@ -2292,7 +2293,7 @@ function renderTres(w) {
   const host = isHost();
 
   if (room.phase === "write") {
-    $("game-status").textContent = "Paso 1 · Escribe tus 3 afirmaciones";
+    $("game-status").textContent = "Escribe tus 3 afirmaciones";
     const submitted = !!load("session", submissionKey(room));
     // La tarjeta marcada como verdad queda en verde y las mentiras en rojo
     const statementInput = (i, placeholder) => `
@@ -2333,7 +2334,7 @@ function renderTres(w) {
 
   const current = room.current || {};
   const isMine = current.playerId === profile.playerId;
-  $("game-status").textContent = `Jugador ${room.pos + 1} de ${room.order.length}`;
+  $("game-status").textContent = `Turno ${room.pos + 1} de ${room.order.length}`;
   ensurePanel(
     `tres|${room.gameId}|${room.round}|${room.phase}`,
     `
@@ -2485,7 +2486,7 @@ function renderDuo(w) {
   const revealed = room.phase === "reveal";
   const options = duoAnswerOptions(info, players);
 
-  $("game-status").textContent = `Pregunta ${room.pos + 1} de ${room.deck.length}`;
+  $("game-status").textContent = `Pregunta ${room.round + 1}`;
   ensurePanel(
     `duo|${room.gameId}|${room.round}|${answered}|${revealed}|${info.type === "suspect" ? players.length : ""}`,
     `
@@ -2856,9 +2857,13 @@ async function postMuroNote() {
 // ---------- Pantalla final (confesiones / 2 mentiras) ----------
 function renderEndPanel(w, title, restartAction) {
   $("game-status").textContent = "Fin de la ronda";
+  const turns = w.room.order?.length || 0;
   ensurePanel(
     `end|${w.room.gameId}`,
-    `<div class="waiting"><div class="waiting-icon">🎉</div><h3 class="panel-title">${title}</h3></div>`
+    `<div class="summary">
+       <div class="reveal-headline">${title}</div>
+       ${turns ? `<p class="reveal-sub">${turns} ${turns === 1 ? "turno jugado" : "turnos jugados"} · ${activePlayers(w.players).length} personas</p>` : ""}
+     </div>`
   );
   $("game-host-bar").innerHTML = isHost()
     ? hostButtons([
