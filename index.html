@@ -9,7 +9,7 @@
   <meta http-equiv="Cache-Control" content="no-cache">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="style.css?v=20261022085336">
+  <link rel="stylesheet" href="style.css?v=20261022085629">
 </head>
 <body>
 
@@ -76,7 +76,13 @@
 
       <div class="page-intro">
         <h2 class="page-title">Conversaciones para <span class="text-gradient">2 personas</span></h2>
-        <p class="page-desc">Dejen el celular al centro de la mesa. Elige qué tipo de preguntas quieren y luego la temática:</p>
+        <p class="page-desc">Dejen el celular al centro de la mesa y túrnense para preguntar.</p>
+        <div class="name-pair">
+          <label class="sr-only" for="input-solo-p1">Nombre de la primera persona</label>
+          <input type="text" class="input-field" id="input-solo-p1" placeholder="Tu nombre" maxlength="20" autocomplete="nickname">
+          <label class="sr-only" for="input-solo-p2">Nombre de la segunda persona</label>
+          <input type="text" class="input-field" id="input-solo-p2" placeholder="Su nombre" maxlength="20" autocomplete="off">
+        </div>
         <div class="chip-row" id="solo-subcat-chips">
           <button type="button" class="filter-chip active" data-subcat="all">Todas</button>
           <button type="button" class="filter-chip" data-subcat="choice">¿Qué prefieres? (A o B)</button>
@@ -91,11 +97,6 @@
     <section id="view-solo" class="view-screen">
       <div class="game-header">
         <button type="button" class="back-btn" id="btn-back-solo">← Temáticas</button>
-        <div class="chip-row compact" id="solo-filter-chips">
-          <button type="button" class="filter-chip" data-subcat="all">Todas <span id="count-subcat-all">0</span></button>
-          <button type="button" class="filter-chip" data-subcat="choice">A o B <span id="count-subcat-choice">0</span></button>
-          <button type="button" class="filter-chip" data-subcat="open">Abiertas <span id="count-subcat-open">0</span></button>
-        </div>
         <button type="button" class="btn btn-secondary btn-sm" id="btn-toggle-table-mode" title="Girar la tarjeta 180° hacia quien le toca">
           <span id="lbl-table-mode-text">Girar carta: sí</span>
         </button>
@@ -106,7 +107,7 @@
         <div class="dual-side-bar top-edge" id="top-player-bar">
           <div class="player-status-badge">
             <span class="player-dot p2-dot"></span>
-            <span>Jugador 2</span>
+            <span id="lbl-p2-name">Jugador 2</span>
           </div>
           <span id="lbl-top-player-instruction">Escucha a Jugador 1</span>
         </div>
@@ -135,9 +136,32 @@
         <div class="dual-side-bar bottom-edge active-player" id="bottom-player-bar">
           <div class="player-status-badge">
             <span class="player-dot p1-dot"></span>
-            <span>Jugador 1</span>
+            <span id="lbl-p1-name">Jugador 1</span>
           </div>
           <span id="lbl-bottom-player-instruction">Te toca preguntar</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 1 CELULAR: SECRETOS EN PAREJA (+18) ========== -->
+    <!-- Responde uno en secreto, le pasa el celular al otro, y se revela si coinciden -->
+    <section id="view-pareja" class="view-screen">
+      <div class="game-header">
+        <button type="button" class="back-btn" id="btn-back-pareja">← Temáticas</button>
+        <span class="turn-pill">Secretos en pareja +18</span>
+      </div>
+      <div class="game-dynamic-box">
+        <div id="pareja-setup">
+          <h2 class="page-title">Secretos en pareja</h2>
+          <p class="page-desc">Cada uno responde en secreto, se pasan el celular y al final se revela si coinciden.</p>
+          <span class="field-label">Intensidad (marca los niveles que quieran)</span>
+          <div class="type-toggle-list" id="pareja-levels"></div>
+          <button type="button" class="btn btn-primary btn-block" id="btn-pareja-start">Empezar</button>
+        </div>
+        <div id="pareja-play" hidden>
+          <div class="eyebrow center" id="pareja-status"></div>
+          <div id="pareja-card"></div>
+          <div id="pareja-stage"></div>
         </div>
       </div>
     </section>
@@ -472,6 +496,6 @@
     <div>RompeHielos · para que la conversación no muera</div>
   </footer>
 
-  <script type="module" src="app.js?v=20261022085336"></script>
+  <script type="module" src="app.js?v=20261022085629"></script>
 </body>
 </html>

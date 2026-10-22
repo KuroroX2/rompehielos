@@ -8,7 +8,7 @@
 //
 // Una pregunta puede ser un texto o un objeto { t, fmt, lvl, tema, opts } (las del +18).
 
-import { localize } from "./locale.js?v=20261022085336";
+import { localize } from "./locale.js?v=20261022085629";
 
 const WORD = "[^\\p{L}]";
 const INTERROGATIVE = new RegExp(

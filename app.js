@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022085336";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022085336";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022085336";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022085336";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022085336";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022085336";
+import { firebaseConfig } from "./firebase-config.js?v=20261022085629";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022085629";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022085629";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022085629";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022085629";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022085629";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -176,7 +176,7 @@ function renderSoloCategories() {
             <span class="cat-emoji" aria-hidden="true">${cat.icono || "🧊"}</span>
             <span class="cat-badge">${escapeHtml(cat.badge || "Pack")}</span>
           </div>
-          <h4>${escapeHtml(cat.titulo)}</h4>
+          <h3>${escapeHtml(cat.titulo)}</h3>
           <p>${escapeHtml(cat.descripcion)}</p>
           <div class="cat-counts">
             <span class="count-chip choice">${choiceCount} A o B</span>
@@ -189,12 +189,27 @@ function renderSoloCategories() {
         </div>`;
     })
     .join("");
+  grid.insertAdjacentHTML("afterbegin", `
+        <div class="category-card" data-catid="pareja" data-deck="secretos_intimos" role="button" tabindex="0">
+          <div class="category-top">
+            <span class="cat-emoji" aria-hidden="true">💞</span>
+            <span class="cat-badge">+18</span>
+          </div>
+          <h3>Secretos en pareja</h3>
+          <p>Cada uno responde en secreto, se pasan el celular y se revela si coinciden.</p>
+          <div class="cat-meta">
+            <span>Niveles 1 a 5</span>
+            <strong>Jugar →</strong>
+          </div>
+        </div>`);
   setChipGroup("solo-subcat-chips", solo.subcategory);
 }
 
 $("solo-categories-grid").addEventListener("click", (e) => {
   const card = e.target.closest(".category-card");
-  if (card) startSoloMode(card.dataset.catid);
+  if (!card) return;
+  if (card.dataset.catid === "pareja") openPareja();
+  else startSoloMode(card.dataset.catid);
 });
 
 $("solo-subcat-chips").addEventListener("click", (e) => {
@@ -204,12 +219,19 @@ $("solo-subcat-chips").addEventListener("click", (e) => {
   setChipGroup("solo-subcat-chips", solo.subcategory);
 });
 
-$("solo-filter-chips").addEventListener("click", (e) => {
-  const chip = e.target.closest(".filter-chip");
-  if (!chip) return;
-  solo.subcategory = chip.dataset.subcat;
-  reshuffleSoloDeck();
-});
+// Nombres de quienes juegan en el mismo celular (quedan guardados para la próxima)
+function soloNames() {
+  return [$("input-solo-p1").value.trim() || "Jugador 1", $("input-solo-p2").value.trim() || "Jugador 2"];
+}
+
+try {
+  const saved = JSON.parse(load("local", "rh_solo_names") || "[]");
+  $("input-solo-p1").value = saved[0] || "";
+  $("input-solo-p2").value = saved[1] || "";
+} catch {}
+["input-solo-p1", "input-solo-p2"].forEach((id) =>
+  $(id).addEventListener("input", () => store("local", "rh_solo_names", JSON.stringify([$("input-solo-p1").value.trim(), $("input-solo-p2").value.trim()])))
+);
 
 function reshuffleSoloDeck() {
   const cat = getCategory(solo.categoryId);
@@ -250,14 +272,11 @@ function updateSoloCard() {
   $("solo-rotating-arena").classList.toggle("rotate-180", solo.tableMode && !isP1);
   $("top-player-bar").classList.toggle("active-player", !isP1);
   $("bottom-player-bar").classList.toggle("active-player", isP1);
-  $("lbl-top-player-instruction").textContent = isP1 ? "Escucha a Jugador 1" : "Te toca preguntar";
-  $("lbl-bottom-player-instruction").textContent = isP1 ? "Te toca preguntar" : "Escucha a Jugador 2";
-
-  const choiceCount = cat.preguntas.filter(isChoiceQuestion).length;
-  $("count-subcat-all").textContent = cat.preguntas.length;
-  $("count-subcat-choice").textContent = choiceCount;
-  $("count-subcat-open").textContent = cat.preguntas.length - choiceCount;
-  setChipGroup("solo-filter-chips", solo.subcategory);
+  const [p1, p2] = soloNames();
+  $("lbl-p1-name").textContent = p1;
+  $("lbl-p2-name").textContent = p2;
+  $("lbl-top-player-instruction").textContent = isP1 ? `Escucha a ${p1}` : "Te toca preguntar";
+  $("lbl-bottom-player-instruction").textContent = isP1 ? "Te toca preguntar" : `Escucha a ${p2}`;
 
   $("solo-cat-badge").textContent = `${cat.icono || ""} ${cat.titulo}`;
   $("solo-counter").textContent = `${solo.index + 1} / ${total}`;
@@ -281,6 +300,130 @@ $("btn-toggle-table-mode").addEventListener("click", () => {
   solo.tableMode = !solo.tableMode;
   updateSoloCard();
   showToast(solo.tableMode ? "La tarjeta gira hacia quien pregunta" : "La tarjeta queda fija", "🔄");
+});
+
+// ---------- Secretos en pareja en un solo celular ----------
+// Turnos: responde uno en secreto -> pantalla para pasar el celular -> responde el otro -> se revelan juntas.
+// Quién parte se alterna en cada pregunta. Nada sale del celular.
+const pareja = { levels: new Set([1, 2]), deck: [], index: 0, first: 0, stage: "answer", answers: [null, null] };
+
+function parejaPool() {
+  return (getCategory("secretos_intimos")?.preguntas || []).filter((q) => q.fmt !== "quien" && pareja.levels.has(q.lvl));
+}
+
+function renderParejaSetup() {
+  const all = (getCategory("secretos_intimos")?.preguntas || []).filter((q) => q.fmt !== "quien");
+  $("pareja-levels").innerHTML = NIVELES_18.filter((n) => !n.group).map((n) =>
+    toggleRowHtml({ attr: "plvl", value: n.lvl, on: pareja.levels.has(n.lvl), icon: n.icon, title: n.title, desc: n.desc, count: all.filter((q) => q.lvl === n.lvl).length })
+  ).join("");
+  const count = parejaPool().length;
+  $("btn-pareja-start").disabled = count === 0;
+  $("btn-pareja-start").textContent = count ? `Empezar · ${count} preguntas` : "Marca al menos un nivel";
+}
+
+function openPareja() {
+  $("pareja-setup").hidden = false;
+  $("pareja-play").hidden = true;
+  renderParejaSetup();
+  switchView("view-pareja");
+}
+
+function parejaOptions(info) {
+  if (info.type === "experience") return EXPERIENCE_OPTIONS.map((label, i) => ({ label, cls: `option exp-${i}` }));
+  if (info.type === "yesno") return info.labels.map((label, i) => ({ label, cls: `big ${i === 0 ? "yes" : "no"}` }));
+  if (info.type === "choice") return info.options.map((label, i) => ({ label, cls: info.options.length > 2 ? "option compact" : "option", letter: optionLetter(i) }));
+  return [];
+}
+
+function renderPareja() {
+  const names = soloNames();
+  const q = pareja.deck[pareja.index];
+  const info = classifyGroupQuestion(q, "secretos_intimos");
+  const nivel = NIVELES_18.find((n) => n.lvl === q.lvl);
+  const order = [pareja.first, 1 - pareja.first];
+  $("pareja-status").textContent = `Pregunta ${pareja.index + 1} de ${pareja.deck.length}`;
+  $("pareja-card").innerHTML = `
+    <div class="question-hero ${nivel ? `lvl-${nivel.lvl}` : ""}" data-deck="secretos_intimos">
+      ${nivel ? `<span class="level-badge">${nivel.icon} ${nivel.title}</span>` : ""}
+      <p class="question-hero-text">${escapeHtml(questionText(q))}</p>
+    </div>`;
+
+  const stage = $("pareja-stage");
+  if (pareja.stage === "answer") {
+    const who = pareja.answers[order[0]] === null ? order[0] : order[1];
+    stage.innerHTML = `
+      <p class="guess-prompt">${escapeHtml(names[who])}, responde en secreto 🤫</p>
+      <div class="voting-options-grid">${parejaOptions(info)
+        .map((o) => `<button type="button" class="vote-btn ${o.cls}" data-pans="${escapeAttr(o.label)}">${o.letter ? `<span class="opt-letter">${o.letter}</span> ` : ""}${escapeHtml(o.label)}</button>`)
+        .join("")}</div>
+      <div class="host-bar"><button type="button" class="btn btn-secondary btn-skip" data-pact="skip">Saltar pregunta</button></div>`;
+  } else if (pareja.stage === "pass") {
+    const next = order[1];
+    stage.innerHTML = `
+      <div class="pass-screen">
+        <div class="waiting-icon">🙈</div>
+        <p>${escapeHtml(names[order[0]])} ya respondió.</p>
+        <p class="pass-who">Pásale el celular a <strong>${escapeHtml(names[next])}</strong></p>
+        <button type="button" class="btn btn-primary btn-block" data-pact="ready">Soy ${escapeHtml(names[next])}, ver opciones</button>
+      </div>`;
+  } else {
+    const same = pareja.answers[0] === pareja.answers[1];
+    stage.innerHTML = `
+      <div class="results-box">
+        <div class="reveal-headline">${same ? "💯 ¡Coinciden!" : "🔀 Respondieron distinto"}</div>
+        <div class="pair-answers">
+          ${[0, 1].map((i) => `<div class="answer-card"><span class="eyebrow">${escapeHtml(names[i])}</span><p>${escapeHtml(pareja.answers[i])}</p></div>`).join("")}
+        </div>
+      </div>
+      <div class="host-bar"><button type="button" class="btn btn-primary" data-pact="next">Siguiente pregunta</button></div>`;
+  }
+}
+
+function parejaNext() {
+  pareja.index = (pareja.index + 1) % pareja.deck.length;
+  pareja.first = 1 - pareja.first;
+  pareja.stage = "answer";
+  pareja.answers = [null, null];
+  renderPareja();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+$("pareja-levels").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-plvl]");
+  if (!btn) return;
+  toggleInSet(pareja.levels, Number(btn.dataset.plvl));
+  renderParejaSetup();
+});
+
+$("btn-pareja-start").addEventListener("click", () => {
+  pareja.deck = shuffleArray(parejaPool());
+  if (!pareja.deck.length) return;
+  pareja.index = 0;
+  pareja.first = 0;
+  pareja.stage = "answer";
+  pareja.answers = [null, null];
+  $("pareja-setup").hidden = true;
+  $("pareja-play").hidden = false;
+  renderPareja();
+});
+
+$("pareja-stage").addEventListener("click", (e) => {
+  const ans = e.target.closest("[data-pans]");
+  if (ans) {
+    const order = [pareja.first, 1 - pareja.first];
+    const who = pareja.answers[order[0]] === null ? order[0] : order[1];
+    pareja.answers[who] = ans.dataset.pans;
+    pareja.stage = who === order[0] ? "pass" : "reveal";
+    renderPareja();
+    return;
+  }
+  const act = e.target.closest("[data-pact]")?.dataset.pact;
+  if (act === "ready") { pareja.stage = "answer"; renderPareja(); }
+  else if (act === "next" || act === "skip") parejaNext();
+});
+
+$("btn-back-pareja").addEventListener("click", () => {
+  if ($("pareja-play").hidden || confirm("¿Salir del juego?")) openSoloCategories();
 });
 
 function openSoloCategories() {
@@ -669,7 +812,7 @@ async function joinRoom(rawCode, { silent = false } = {}) {
       return false;
     }
     await writePlayerDoc(code);
-    enterRoom(code);
+    enterRoom(code, { silent });
     if (!silent) showToast(`Entraste a la sala ${code}`, "🚀");
     return true;
   } catch (err) {
@@ -691,7 +834,9 @@ $("input-room-code").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $("btn-submit-join").click();
 });
 
-function enterRoom(code) {
+// silent = volver solo a la sala guardada al abrir la web; si la persona ya se fue a otra
+// pantalla (por ejemplo, a jugar en 1 celular), no se la saca de ahí.
+function enterRoom(code, { silent = false } = {}) {
   roomWatcher?.stop();
   lastPanelKey = null;
   store("local", "rh_room", code);
@@ -711,7 +856,9 @@ function enterRoom(code) {
   clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
   setTimeout(maybeClaimHost, 3000);
-  if (activeViewId() !== "view-tv") switchView("view-lobby");
+  const busyElsewhere = silent && !["view-home", "view-lobby"].includes(activeViewId());
+  if (busyElsewhere) showToast(`Sigues en la sala ${code}. Vuelve cuando quieras desde "Jugar en grupo"`, "👥");
+  else if (activeViewId() !== "view-tv") switchView("view-lobby");
 }
 
 function heartbeat() {
