@@ -1,10 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261022191642";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022191642";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022191642";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022191642";
-import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022191642";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022191642";
+import { firebaseConfig } from "./firebase-config.js?v=20261022191912";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022191912";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022191912";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022191912";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022191912";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022191912";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -1023,6 +1023,12 @@ async function leaveRoomByCode(code, others = null) {
   }
   await deleteDoc(doc(db, "salas", code, "players", profile.playerId));
   if (load("local", "rh_room") === code) unstore("local", "rh_room");
+  // Si otra persona salió al mismo tiempo, puede que nadie haya visto la sala vacía: se revisa de nuevo
+  const after = await getDocs(collection(db, "salas", code, "players")).catch(() => null);
+  if (after && after.empty) {
+    const fresh = await getDoc(roomRef(code)).catch(() => null);
+    if (fresh?.exists() && fresh.data().state !== "expired") await closeRoom(code, fresh.data()).catch(() => {});
+  }
 }
 
 function resetRoomUi() {
