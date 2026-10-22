@@ -1,9 +1,10 @@
 // app.js - Lógica principal de RompeHielos
-import { firebaseConfig } from "./firebase-config.js?v=20261021214547";
-import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261021214547";
-import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261021214547";
-import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261021214547";
-import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261021214547";
+import { firebaseConfig } from "./firebase-config.js?v=20261022073002";
+import { DEFAULT_CATEGORIES } from "./questions-data.js?v=20261022073002";
+import { classifyGroupQuestion, isChoiceQuestion, questionText, questionId, EXPERIENCE_OPTIONS, FORMAT_LABELS } from "./question-types.js?v=20261022073002";
+import { NIVELES_18, TEMAS_18 } from "./questions-18.js?v=20261022073002";
+import { IS_CHILE, tr, localize, localizeStaticDom, setRegion } from "./locale.js?v=20261022073002";
+import { PERSONA_VARIANTS, CARTELES, PROFESIONES } from "./persona-data.js?v=20261022073002";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
@@ -51,7 +52,13 @@ function buildCategories(patch) {
       .filter((q) => !deleted.has(questionId(cat.id, q)))
       .map((q) => patch.edits?.[questionId(cat.id, q)] || q);
     const added = (patch.added?.[cat.id] || []).filter((q) => !deleted.has(q.id));
-    return { ...cat, preguntas: [...base, ...added] };
+    return {
+      ...cat,
+      titulo: localize(cat.titulo),
+      descripcion: localize(cat.descripcion),
+      badge: localize(cat.badge),
+      preguntas: [...base, ...added],
+    };
   });
 }
 
@@ -314,6 +321,12 @@ const ROOM_DYNAMICS = [
   { key: "duo", mode: "duo", icon: "⚡", title: "Respuestas en sincronía", desc: "Todos responden la misma pregunta en secreto y se revelan juntas." },
   { key: "muro", mode: "muro", icon: "🧱", title: "Muro anónimo", desc: "Mensajes sin nombre que aparecen en vivo en todos los celulares." },
 ];
+
+// Títulos y descripciones de los juegos en el idioma de la región
+ROOM_DYNAMICS.forEach((d) => {
+  d.title = localize(d.title);
+  d.desc = localize(d.desc);
+});
 
 function getDynamic(key) {
   return ROOM_DYNAMICS.find((d) => d.key === key) || ROOM_DYNAMICS[0];
@@ -3104,6 +3117,14 @@ async function restoreRoomFromUrlOrSession() {
   }
   if (savedRoom && profile.name) await rejoinSavedRoom(savedRoom);
 }
+
+// Fuera de Chile, el HTML fijo se muestra en español neutro; el pie permite cambiarlo
+localizeStaticDom();
+$("footer-btn-region").textContent = IS_CHILE ? "Ver en español neutro" : "Ver en español de Chile 🇨🇱";
+$("footer-btn-region").addEventListener("click", () => {
+  setRegion(IS_CHILE ? "neutral" : "cl");
+  window.location.reload();
+});
 
 setupProfilePickers();
 renderDynamicsGrid();

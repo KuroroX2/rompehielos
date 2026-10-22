@@ -6,9 +6,9 @@ import re, time, pathlib
 
 VERSION = time.strftime("%Y%m%d%H%M%S")
 ROOT = pathlib.Path(__file__).parent
-LOCAL_FILE = r"(\./)?(app|style|firebase-config|questions-data|questions-18|question-types|persona-data)\.(js|css)"
+LOCAL_FILE = r"(\./)?(app|style|firebase-config|questions-data|questions-18|question-types|persona-data|locale)\.(js|css)"
 
-for name in ["index.html", "terminos.html", "privacidad.html", "app.js", "questions-data.js"]:
+for name in ["index.html", "terminos.html", "privacidad.html", "app.js", "questions-data.js", "question-types.js"]:
     path = ROOT / name
     text = path.read_text(encoding="utf-8")
     text = re.sub(r'(["\'])(' + LOCAL_FILE + r')(\?v=\w+)?\1', lambda m: f"{m.group(1)}{m.group(2)}?v={VERSION}{m.group(1)}", text)

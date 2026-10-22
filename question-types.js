@@ -8,6 +8,8 @@
 //
 // Una pregunta puede ser un texto o un objeto { t, fmt, lvl, tema, opts } (las del +18).
 
+import { localize } from "./locale.js?v=20261022073002";
+
 const WORD = "[^\\p{L}]";
 const INTERROGATIVE = new RegExp(
   `(^|${WORD})(qué|cuál|cuáles|quién|quiénes|cómo|dónde|cuándo|cuánto|cuánta|cuántos|cuántas|por qué)(?=${WORD}|$)`,
@@ -56,7 +58,7 @@ function rawText(q) {
 
 // Texto que se muestra en pantalla, sin la lista de opciones entre corchetes
 export function questionText(q) {
-  return rawText(q).replace(EXPLICIT_OPTIONS, "").trim();
+  return localize(rawText(q).replace(EXPLICIT_OPTIONS, "").trim());
 }
 
 // Id estable de una pregunta: el que trae el objeto o un hash de su texto
@@ -72,7 +74,7 @@ export function classifyGroupQuestion(q, categoryId = "") {
   if (q && typeof q === "object" && q.fmt) {
     if (q.fmt === "exp") return { type: "experience", options: EXPERIENCE_OPTIONS };
     if (q.fmt === "conf") return { type: "yesno", labels: CONFESSION_LABELS };
-    if (q.fmt === "gusto" && Array.isArray(q.opts) && q.opts.length >= 2) return { type: "choice", options: q.opts };
+    if (q.fmt === "gusto" && Array.isArray(q.opts) && q.opts.length >= 2) return { type: "choice", options: q.opts.map(localize) };
     if (q.fmt === "fant") return { type: "choice", options: DESIRE_OPTIONS };
     if (q.fmt === "quien") return { type: "suspect" };
   }
@@ -80,7 +82,7 @@ export function classifyGroupQuestion(q, categoryId = "") {
   const text = rawText(q);
   const explicit = text.match(EXPLICIT_OPTIONS);
   if (explicit) {
-    const options = explicit[1].split("|").map((o) => o.trim()).filter(Boolean);
+    const options = explicit[1].split("|").map((o) => localize(o.trim())).filter(Boolean);
     if (options.length >= 2) return { type: "choice", options };
   }
 
